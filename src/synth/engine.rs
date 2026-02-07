@@ -84,6 +84,16 @@ impl SynthEngine {
         }
     }
 
+    /// Process a SysEx message (raw data without F0/F7 framing).
+    /// Handles master tune, scale tuning, and system resets internally.
+    /// Master volume is managed externally by ump, so it is restored after processing.
+    pub fn process_sysex(&mut self, data: &[u8]) {
+        self.synth.process_sysex(data);
+        // ump manages master volume via shared state (app_volume * sysex_volume);
+        // restore rustysynth's internal master volume to avoid double-application
+        self.synth.set_master_volume(0.5);
+    }
+
     /// Full system reset: silence all channels, reset controllers,
     /// set program 0, and configure bank (drum on Ch9, normal on others).
     pub fn system_reset(&mut self) {

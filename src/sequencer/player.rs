@@ -221,6 +221,9 @@ impl Sequencer {
                     .store(*pressure as u32, Ordering::Relaxed);
             }
             MidiEvent::SysEx(data) => {
+                // Forward to rustysynth for master tune, scale tuning, etc.
+                synth.process_sysex(data);
+
                 if let Some(cmd) = parse_sysex(data) {
                     match cmd {
                         SysExCommand::SystemReset(_) => {
@@ -328,6 +331,9 @@ impl Sequencer {
                         .store(*pressure as u32, Ordering::Relaxed);
                 }
                 MidiEvent::SysEx(data) => {
+                    // Forward to rustysynth for master tune, scale tuning, etc.
+                    synth.process_sysex(data);
+
                     if let Some(cmd) = parse_sysex(data) {
                         match cmd {
                             SysExCommand::SystemReset(_) => {
