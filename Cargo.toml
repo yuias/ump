@@ -1,7 +1,10 @@
 [package]
 name = "ump"
+authors = ["yuinshielAs <u5h10n04@s1nc3r34dv1c3.com>"]
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/yuiAs/ump"
 
 [features]
 default = ["d2d"]
@@ -37,3 +40,4 @@ serde = { version = "1", features = ["derive"] }
 [profile.release]
 opt-level = 3
 lto = true
+strip = true
