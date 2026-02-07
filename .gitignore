@@ -34,4 +34,4 @@ target
 CLAUDE.md
 
 # Debug
-/assets-debug
+docs/dev/*
