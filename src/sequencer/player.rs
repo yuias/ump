@@ -89,6 +89,7 @@ impl Sequencer {
 
         let volume = shared.get_volume_f32();
         let muted = shared.muted_channels.load(Ordering::Relaxed);
+        synth.set_channel_mute_mask(muted as u16);
 
         // Process events and render in small chunks to maintain timing accuracy
         let chunk_size = 64;
@@ -369,6 +370,10 @@ impl Sequencer {
 
             self.event_index += 1;
         }
+
+        // Re-sync mute mask after state rebuild (synth.reset() may clear it)
+        let muted = shared.muted_channels.load(Ordering::Relaxed);
+        synth.set_channel_mute_mask(muted as u16);
 
         // Set time position
         self.current_tick = target_tick;

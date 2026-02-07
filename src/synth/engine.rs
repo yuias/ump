@@ -111,4 +111,16 @@ impl SynthEngine {
             self.synth.process_midi_message(ch, 0xC0, 0, 0);
         }
     }
+
+    /// Sync channel mute mask to the synthesizer.
+    /// Each bit in `mask` corresponds to a channel (bit 0 = ch0, bit 15 = ch15).
+    /// Muted channels have their voice gain set to 0 for immediate silencing.
+    pub fn set_channel_mute_mask(&mut self, mask: u16) {
+        self.synth.set_channel_mute_mask(mask);
+    }
+
+    /// Get a reference to a channel's state.
+    pub fn get_channel(&self, channel: usize) -> Option<&rustysynth::Channel> {
+        self.synth.get_channel(channel)
+    }
 }
