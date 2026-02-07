@@ -98,18 +98,20 @@ impl SynthEngine {
     /// set program 0, and configure bank (drum on Ch9, normal on others).
     pub fn system_reset(&mut self) {
         for ch in 0..16i32 {
-            // All Sound Off (CC 120)
+            self.synth
+                .set_percussion_channel(ch as usize, ch == 9);
             self.synth.process_midi_message(ch, 0xB0, 120, 0);
-            // Reset All Controllers (CC 121)
             self.synth.process_midi_message(ch, 0xB0, 121, 0);
-            // All Notes Off (CC 123)
             self.synth.process_midi_message(ch, 0xB0, 123, 0);
-            // Bank Select MSB (CC 0): 128 for drum (ch9), 0 for normal
-            let bank = if ch == 9 { 128 } else { 0 };
-            self.synth.process_midi_message(ch, 0xB0, 0, bank);
-            // Program Change to 0
+            // Bank 0 — set_bank auto-applies +128 offset for percussion channels
+            self.synth.process_midi_message(ch, 0xB0, 0, 0);
             self.synth.process_midi_message(ch, 0xC0, 0, 0);
         }
+    }
+
+    /// Set whether a channel is a percussion channel.
+    pub fn set_percussion_channel(&mut self, channel: usize, is_percussion: bool) {
+        self.synth.set_percussion_channel(channel, is_percussion);
     }
 
     /// Sync channel mute mask to the synthesizer.

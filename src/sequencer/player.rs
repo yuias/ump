@@ -235,8 +235,8 @@ impl Sequencer {
                         }
                         SysExCommand::GsDrumMap { channel, is_drum } => {
                             let ch = channel as i32;
-                            let bank = if is_drum { 128 } else { 0 };
-                            synth.control_change(ch, 0, bank);
+                            synth.set_percussion_channel(channel as usize, is_drum);
+                            synth.control_change(ch, 0, 0);
                             synth.program_change(ch, 0);
                             if is_drum {
                                 let _ = shared
@@ -266,6 +266,9 @@ impl Sequencer {
     ) {
         // Reset synthesizer
         synth.reset();
+        for ch in 0..16usize {
+            synth.set_percussion_channel(ch, ch == 9);
+        }
 
         // Reset sequencer state
         self.event_index = 0;
@@ -345,8 +348,8 @@ impl Sequencer {
                             }
                             SysExCommand::GsDrumMap { channel, is_drum } => {
                                 let ch = channel as i32;
-                                let bank = if is_drum { 128 } else { 0 };
-                                synth.control_change(ch, 0, bank);
+                                synth.set_percussion_channel(channel as usize, is_drum);
+                                synth.control_change(ch, 0, 0);
                                 synth.program_change(ch, 0);
                                 if is_drum {
                                     let _ = shared
