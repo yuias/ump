@@ -188,12 +188,29 @@ All guarded by `if let Some(effects) = self.effects.as_mut()`.
 - `portamento_offset` / `portamento_speed` fields
 - Pitch offset decays towards 0 per audio block
 
+### Phase 10: Dynamic Drum Map (Percussion Channel Toggle)
+
+**Purpose:** Enable GS SysEx drum map switching (`40 1x 15`) to dynamically reassign any channel as percussion/normal at runtime.
+
+#### channel.rs
+- `set_percussion_channel(is_percussion: bool)` — `pub(crate)` setter for `is_percussion_channel` flag
+- Flag drives `reset()` (bank 128 vs 0) and `set_bank()` (+128 auto-offset)
+
+#### synthesizer.rs
+- `set_percussion_channel(channel: usize, is_percussion: bool)` — public API delegating to `Channel`
+
+#### Usage in ump
+- `SynthEngine::set_percussion_channel()` wrapper
+- `system_reset()`: resets all channels to default (ch9 = percussion, others = normal) before bank/program reset
+- `seek_to_tick()`: resets percussion flags after `synth.reset()`, then replays GsDrumMap events
+- `dispatch_event()` GsDrumMap: calls `set_percussion_channel()` + bank 0 (auto-offset handles +128)
+
 ## Changed Files
 
 | File | Phases | Changes |
 |------|--------|---------|
-| `rustysynth/src/channel.rs` | 1-2, 5-9 | pub visibility, raw getters, CC fields, NRPN, scale tuning, portamento |
-| `rustysynth/src/synthesizer.rs` | 1-4, 6-9 | get_channel, mute, CC dispatch, reverb/chorus, SysEx, master tune, scale tuning, portamento |
+| `rustysynth/src/channel.rs` | 1-2, 5-10 | pub visibility, raw getters, CC fields, NRPN, scale tuning, portamento, percussion toggle |
+| `rustysynth/src/synthesizer.rs` | 1-4, 6-10 | get_channel, mute, CC dispatch, reverb/chorus, SysEx, master tune, scale tuning, portamento, percussion toggle |
 | `rustysynth/src/reverb.rs` | 3 | set_* visibility (fn → pub(crate) fn) |
 | `rustysynth/src/chorus.rs` | 4 | set_params method added |
 | `rustysynth/src/lib.rs` | 1 | Channel re-export |
@@ -232,4 +249,7 @@ synth.set_master_tune(0.5);  // +50 cents
 
 // Scale tuning (per-channel, cents per pitch class)
 synth.set_scale_tuning(0, &[0.0, -10.0, 0.0, 0.0, -5.0, 0.0, 0.0, 2.0, 0.0, 0.0, -8.0, 0.0]);
+
+// Dynamic drum map — set channel 1 as percussion
+synth.set_percussion_channel(1, true);
 ```
