@@ -24,6 +24,12 @@ pub struct ChannelStates {
     pub aftertouch: [AtomicU32; 16],
     /// Last note-on velocity (0-127), for activity display.
     pub velocity: [AtomicU32; 16],
+    /// CC0 Bank Select MSB (0-127).
+    pub bank: [AtomicU32; 16],
+    /// CC91 Reverb Send (0-127).
+    pub reverb: [AtomicU32; 16],
+    /// CC93 Chorus Send (0-127).
+    pub chorus: [AtomicU32; 16],
 }
 
 impl ChannelStates {
@@ -38,6 +44,9 @@ impl ChannelStates {
             pedal: std::array::from_fn(|_| AtomicU32::new(0)),
             aftertouch: std::array::from_fn(|_| AtomicU32::new(0)),
             velocity: std::array::from_fn(|_| AtomicU32::new(0)),
+            bank: std::array::from_fn(|_| AtomicU32::new(0)),
+            reverb: std::array::from_fn(|_| AtomicU32::new(40)),
+            chorus: std::array::from_fn(|_| AtomicU32::new(0)),
         }
     }
 
@@ -53,6 +62,9 @@ impl ChannelStates {
             self.pedal[i].store(0, Ordering::Relaxed);
             self.aftertouch[i].store(0, Ordering::Relaxed);
             self.velocity[i].store(0, Ordering::Relaxed);
+            self.bank[i].store(0, Ordering::Relaxed);
+            self.reverb[i].store(40, Ordering::Relaxed);
+            self.chorus[i].store(0, Ordering::Relaxed);
         }
     }
 }

@@ -179,11 +179,14 @@ impl Sequencer {
                 let ch = *channel as usize;
                 let v = *value as u32;
                 match *controller {
+                    0 => shared.channel_states.bank[ch].store(v, Ordering::Relaxed),
                     1 => shared.channel_states.modulation[ch].store(v, Ordering::Relaxed),
                     7 => shared.channel_states.volume[ch].store(v, Ordering::Relaxed),
                     10 => shared.channel_states.pan[ch].store(v, Ordering::Relaxed),
                     11 => shared.channel_states.expression[ch].store(v, Ordering::Relaxed),
                     64 => shared.channel_states.pedal[ch].store(v, Ordering::Relaxed),
+                    91 => shared.channel_states.reverb[ch].store(v, Ordering::Relaxed),
+                    93 => shared.channel_states.chorus[ch].store(v, Ordering::Relaxed),
                     _ => {}
                 }
             }
@@ -301,11 +304,14 @@ impl Sequencer {
                     let ch = *channel as usize;
                     let v = *value as u32;
                     match *controller {
+                        0 => shared.channel_states.bank[ch].store(v, Ordering::Relaxed),
                         1 => shared.channel_states.modulation[ch].store(v, Ordering::Relaxed),
                         7 => shared.channel_states.volume[ch].store(v, Ordering::Relaxed),
                         10 => shared.channel_states.pan[ch].store(v, Ordering::Relaxed),
                         11 => shared.channel_states.expression[ch].store(v, Ordering::Relaxed),
                         64 => shared.channel_states.pedal[ch].store(v, Ordering::Relaxed),
+                        91 => shared.channel_states.reverb[ch].store(v, Ordering::Relaxed),
+                        93 => shared.channel_states.chorus[ch].store(v, Ordering::Relaxed),
                         _ => {}
                     }
                 }

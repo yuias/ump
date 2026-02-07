@@ -10,8 +10,8 @@ use crate::synth::gm::gm_instrument_name;
 use crate::ui::theme;
 
 /// Minimum content rows for the Default (extended) view:
-/// Ch header(1) + param rows(8) + separator(1) + activity bars(3) = 13
-pub const EXTENDED_MIN_CONTENT_ROWS: u16 = 13;
+/// Ch header(1) + param rows(11) + separator(1) + activity bars(3) = 16
+pub const EXTENDED_MIN_CONTENT_ROWS: u16 = 16;
 
 /// Represents a single row in the flattened Detail view.
 #[derive(Debug, Clone)]
@@ -181,7 +181,7 @@ fn render_extended_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App
 
     let drum_mask = app.shared.drum_channels.load(Ordering::Relaxed);
 
-    let param_labels = ["Prg", "Vol", "Pan", "Exp", "Mod", "Bnd", "Ped", "AT"];
+    let param_labels = ["Prg", "Vol", "Pan", "Exp", "Mod", "Bnd", "Ped", "AT", "Bnk", "Rev", "Cho"];
     let param_fns: &[&dyn Fn(u8) -> String] = &[
         &|ch_idx: u8| {
             let p = cs.program[ch_idx as usize].load(Ordering::Relaxed);
@@ -225,6 +225,15 @@ fn render_extended_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App
         &|ch_idx: u8| {
             let v = cs.aftertouch[ch_idx as usize].load(Ordering::Relaxed);
             format!("{:>3}", v)
+        },
+        &|ch_idx: u8| {
+            format!("{:>3}", cs.bank[ch_idx as usize].load(Ordering::Relaxed))
+        },
+        &|ch_idx: u8| {
+            format!("{:>3}", cs.reverb[ch_idx as usize].load(Ordering::Relaxed))
+        },
+        &|ch_idx: u8| {
+            format!("{:>3}", cs.chorus[ch_idx as usize].load(Ordering::Relaxed))
         },
     ];
 
