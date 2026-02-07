@@ -10,7 +10,7 @@ Built with Rust, using hardware-accelerated rendering (Direct2D or wgpu) and a c
 
 - **SF2 Soundfont Synthesis** -- Real-time MIDI rendering via [rustysynth](https://github.com/sinshu/rustysynth)
 - **Piano Roll** -- Scrolling note visualization with per-channel coloring
-- **Track List** -- Two view modes: Default (16-channel grid) and Detail (per-track tree)
+- **Track List** -- Two view modes: Default (16-channel grid with bank/reverb/chorus state) and Detail (per-track tree)
 - **MIDI Mode Detection** -- Auto-detects GM/GS/XG/GM2 from SysEx reset messages and bank select patterns; manual override with `1`-`4` keys
 - **Per-Track Mute** -- Mute/unmute individual channels during playback
 - **Seek** -- Forward/backward seeking with full state reconstruction (program changes, control changes, pitch bends)
@@ -98,7 +98,7 @@ Relative paths in `settings.toml` are resolved against the config directory.
 ## Limitations
 
 - **Linux/macOS support is experimental** -- The wgpu backend is functional but less tested than the D2D backend on Windows.
-- **SysEx support is partial** -- GM/GS/XG/GM2 reset messages and Master Volume are recognized. Other SysEx commands (e.g. GS part parameters, XG effect settings, drum map changes) are parsed but not reproduced by the synthesizer.
+- **SysEx support is partial** -- GM/GS/XG/GM2 reset, Master Volume, master tune, scale tuning, and GS drum map changes are processed. Other SysEx commands (e.g. GS part parameters, XG effect settings) are parsed but not fully reproduced.
 - **No MIDI output** -- Playback is software-synthesized only. External MIDI device output is not supported.
 - **Single soundfont** -- Only one SF2 file can be loaded at a time. Layering multiple soundfonts is not supported.
 - **No audio device selection** -- Uses the system default audio output device.
@@ -108,7 +108,7 @@ Relative paths in `settings.toml` are resolved against the config directory.
 | Crate | Purpose |
 |---|---|
 | [midly](https://crates.io/crates/midly) | MIDI file parsing |
-| [rustysynth](https://crates.io/crates/rustysynth) | SF2 soundfont synthesizer |
+| [rustysynth](https://github.com/yuiAs/rustysynth) | SF2 soundfont synthesizer (fork with SysEx, mute, and effect control) |
 | [cpal](https://crates.io/crates/cpal) | Cross-platform audio output |
 | [winit](https://crates.io/crates/winit) | Window creation and event loop |
 | [windows](https://crates.io/crates/windows) | Direct2D / DirectWrite rendering (d2d feature) |

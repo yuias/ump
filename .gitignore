@@ -35,3 +35,4 @@ CLAUDE.md
 
 # Debug
 docs/dev/*
+!docs/dev/RustySynth-FutureTasks.md
