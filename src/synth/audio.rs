@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::Stream;
 
-use super::engine::SynthEngine;
+use super::engine::SynthPool;
 use crate::sequencer::Sequencer;
 use crate::state::SharedState;
 
@@ -33,7 +33,7 @@ impl AudioOutput {
     /// The stream runs the sequencer and synthesizer in the cpal callback.
     pub fn start(
         sequencer: Arc<Mutex<Sequencer>>,
-        synth: Arc<Mutex<Option<SynthEngine>>>,
+        synth: Arc<Mutex<Option<SynthPool>>>,
         shared: Arc<SharedState>,
         sample_rate: u32,
     ) -> Result<Self> {

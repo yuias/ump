@@ -126,3 +126,130 @@ impl SynthEngine {
         self.synth.get_channel(channel)
     }
 }
+
+/// Pool of multiple SynthEngines with per-channel routing.
+/// Each channel maps to one engine via the routing table.
+pub struct SynthPool {
+    engines: Vec<SynthEngine>,
+    routing: [usize; 16],
+}
+
+impl SynthPool {
+    /// Create a pool from multiple SF2 data blobs with per-channel routing.
+    pub fn new(sf2_data_list: &[&[u8]], routing: [usize; 16], sample_rate: u32) -> Result<Self> {
+        if sf2_data_list.is_empty() {
+            anyhow::bail!("SynthPool requires at least one SF2 file");
+        }
+        let mut engines = Vec::with_capacity(sf2_data_list.len());
+        for (i, data) in sf2_data_list.iter().enumerate() {
+            engines.push(
+                SynthEngine::new(data, sample_rate)
+                    .with_context(|| format!("Failed to create engine {}", i))?,
+            );
+        }
+        Ok(SynthPool { engines, routing })
+    }
+
+    /// Convenience: create a pool with a single SF2 (all channels → engine 0).
+    pub fn single(sf2_data: &[u8], sample_rate: u32) -> Result<Self> {
+        let engine = SynthEngine::new(sf2_data, sample_rate)?;
+        Ok(SynthPool {
+            engines: vec![engine],
+            routing: [0; 16],
+        })
+    }
+
+    pub fn sample_rate(&self) -> u32 {
+        self.engines[0].sample_rate()
+    }
+
+    pub fn note_on(&mut self, channel: i32, key: i32, velocity: i32) {
+        let idx = self.routing[channel as usize & 0xF];
+        self.engines[idx].note_on(channel, key, velocity);
+    }
+
+    pub fn note_off(&mut self, channel: i32, key: i32) {
+        let idx = self.routing[channel as usize & 0xF];
+        self.engines[idx].note_off(channel, key);
+    }
+
+    pub fn program_change(&mut self, channel: i32, program: i32) {
+        let idx = self.routing[channel as usize & 0xF];
+        self.engines[idx].program_change(channel, program);
+    }
+
+    pub fn control_change(&mut self, channel: i32, controller: i32, value: i32) {
+        let idx = self.routing[channel as usize & 0xF];
+        self.engines[idx].control_change(channel, controller, value);
+    }
+
+    pub fn pitch_bend(&mut self, channel: i32, value: i16) {
+        let idx = self.routing[channel as usize & 0xF];
+        self.engines[idx].pitch_bend(channel, value);
+    }
+
+    pub fn poly_aftertouch(&mut self, channel: i32, key: i32, pressure: i32) {
+        let idx = self.routing[channel as usize & 0xF];
+        self.engines[idx].poly_aftertouch(channel, key, pressure);
+    }
+
+    pub fn channel_aftertouch(&mut self, channel: i32, pressure: i32) {
+        let idx = self.routing[channel as usize & 0xF];
+        self.engines[idx].channel_aftertouch(channel, pressure);
+    }
+
+    /// Render audio from all engines and mix into the output buffers.
+    pub fn render(&mut self, left: &mut [f32], right: &mut [f32]) {
+        if self.engines.len() == 1 {
+            // Fast path: single engine, no mixing needed
+            self.engines[0].render(left, right);
+            return;
+        }
+
+        // First engine renders directly into output
+        self.engines[0].render(left, right);
+
+        // Additional engines render into temp buffers and accumulate
+        let len = left.len();
+        let mut tmp_left = vec![0.0f32; len];
+        let mut tmp_right = vec![0.0f32; len];
+        for engine in &mut self.engines[1..] {
+            tmp_left.fill(0.0);
+            tmp_right.fill(0.0);
+            engine.render(&mut tmp_left, &mut tmp_right);
+            for i in 0..len {
+                left[i] += tmp_left[i];
+                right[i] += tmp_right[i];
+            }
+        }
+    }
+
+    pub fn reset(&mut self) {
+        for engine in &mut self.engines {
+            engine.reset();
+        }
+    }
+
+    pub fn process_sysex(&mut self, data: &[u8]) {
+        for engine in &mut self.engines {
+            engine.process_sysex(data);
+        }
+    }
+
+    pub fn system_reset(&mut self) {
+        for engine in &mut self.engines {
+            engine.system_reset();
+        }
+    }
+
+    pub fn set_percussion_channel(&mut self, channel: usize, is_percussion: bool) {
+        let idx = self.routing[channel & 0xF];
+        self.engines[idx].set_percussion_channel(channel, is_percussion);
+    }
+
+    pub fn set_channel_mute_mask(&mut self, mask: u16) {
+        for engine in &mut self.engines {
+            engine.set_channel_mute_mask(mask);
+        }
+    }
+}

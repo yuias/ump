@@ -13,7 +13,7 @@ use crate::midi::tempo_map::TempoMap;
 use crate::sequencer::Sequencer;
 use crate::state::{SharedState, TrackInfoSnapshot};
 use crate::synth::audio::AudioOutput;
-use crate::synth::engine::SynthEngine;
+use crate::synth::engine::SynthPool;
 use crate::ui::file_browser::FileBrowser;
 use crate::ui::track_list::raw_row_count;
 
@@ -38,7 +38,7 @@ pub enum TrackViewMode {
 pub struct App {
     pub shared: Arc<SharedState>,
     pub sequencer: Arc<Mutex<Sequencer>>,
-    pub synth: Arc<Mutex<Option<SynthEngine>>>,
+    pub synth: Arc<Mutex<Option<SynthPool>>>,
     pub audio: Option<AudioOutput>,
     pub tempo_map: TempoMap,
 
@@ -89,7 +89,7 @@ impl App {
     pub fn new_loaded(
         shared: Arc<SharedState>,
         sequencer: Arc<Mutex<Sequencer>>,
-        synth: Arc<Mutex<Option<SynthEngine>>>,
+        synth: Arc<Mutex<Option<SynthPool>>>,
         midi_data: &MidiData,
         tempo_map: TempoMap,
         file_name: String,
@@ -291,7 +291,7 @@ impl App {
         let sf2_bytes =
             std::fs::read(path).with_context(|| format!("Failed to read SF2 file: {}", path))?;
         log_info!("SF2: file={}, size={} bytes", path, sf2_bytes.len());
-        let new_synth = SynthEngine::new(&sf2_bytes, self.sample_rate)?;
+        let new_synth = SynthPool::single(&sf2_bytes, self.sample_rate)?;
 
         {
             let mut syn = self.synth.lock().unwrap();
@@ -309,6 +309,47 @@ impl App {
         // Update config with absolute path
         self.config.soundfont.recent_path = Some(crate::config::to_absolute_path(path));
         self.config.save();
+
+        Ok(())
+    }
+
+    /// Reload synth from a SoundfontBundle (multiple SF2 files with routing).
+    pub fn reload_bundle(&mut self, bundle: &crate::config::SoundfontBundle) -> Result<()> {
+        // Load all SF2 files
+        let mut sf2_data_list: Vec<Vec<u8>> = Vec::new();
+        let mut names = Vec::new();
+        for file_path in &bundle.files {
+            let resolved = crate::config::resolve_path(file_path);
+            let bytes = std::fs::read(&resolved)
+                .with_context(|| format!("Failed to read SF2 file: {}", resolved))?;
+            log_info!("SF2 bundle: file={}, size={} bytes", resolved, bytes.len());
+            let name = std::path::Path::new(&resolved)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| resolved.clone());
+            names.push(name);
+            sf2_data_list.push(bytes);
+        }
+
+        // Build routing table
+        let mut routing = [0usize; 16];
+        if let Some(ref route_vec) = bundle.routing {
+            for (ch, &idx) in route_vec.iter().enumerate() {
+                if ch < 16 && (idx as usize) < sf2_data_list.len() {
+                    routing[ch] = idx as usize;
+                }
+            }
+        }
+
+        let refs: Vec<&[u8]> = sf2_data_list.iter().map(|v| v.as_slice()).collect();
+        let new_pool = SynthPool::new(&refs, routing, self.sample_rate)?;
+
+        {
+            let mut syn = self.synth.lock().unwrap();
+            *syn = Some(new_pool);
+        }
+
+        self.sf2_name = names.join(" + ");
 
         Ok(())
     }
@@ -451,6 +492,19 @@ impl App {
 
     pub fn set_midi_mode(&mut self, mode: &str) {
         self.midi_mode = mode.to_string();
+
+        // Check if a bundle is configured for this mode
+        if let Some(bundle) = self.config.soundfont.resolve_bundle(mode).cloned() {
+            match self.reload_bundle(&bundle) {
+                Ok(()) => {
+                    log_info!("Loaded bundle for mode: {}", mode);
+                }
+                Err(e) => {
+                    log_error!("Failed to load bundle for mode {}: {}", mode, e);
+                    // Fall back to standard reset
+                }
+            }
+        }
 
         // Reset synth to clean state for the new mode
         if let Ok(mut guard) = self.synth.lock() {

@@ -7,7 +7,7 @@ use crate::midi::event::{MidiData, MidiEvent, TimedMidiEvent};
 use crate::midi::sysex::{parse_sysex, SysExCommand};
 use crate::midi::tempo_map::TempoMap;
 use crate::state::SharedState;
-use crate::synth::engine::SynthEngine;
+use crate::synth::engine::SynthPool;
 
 #[allow(dead_code)]
 pub struct Sequencer {
@@ -58,7 +58,7 @@ impl Sequencer {
     /// Called from the cpal audio callback.
     pub fn fill_buffer(
         &mut self,
-        synth: &mut SynthEngine,
+        synth: &mut SynthPool,
         left: &mut [f32],
         right: &mut [f32],
         shared: &Arc<SharedState>,
@@ -150,7 +150,7 @@ impl Sequencer {
     fn dispatch_event(
         evt: &TimedMidiEvent,
         us_per_quarter: &mut u32,
-        synth: &mut SynthEngine,
+        synth: &mut SynthPool,
         muted: u32,
         shared: &Arc<SharedState>,
     ) {
@@ -264,7 +264,7 @@ impl Sequencer {
     fn seek_to_tick(
         &mut self,
         target_tick: u64,
-        synth: &mut SynthEngine,
+        synth: &mut SynthPool,
         shared: &Arc<SharedState>,
     ) {
         // Reset synthesizer

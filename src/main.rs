@@ -38,7 +38,7 @@ use crate::renderer::Renderer;
 use crate::sequencer::Sequencer;
 use crate::state::{SharedState, TrackInfoSnapshot};
 use crate::synth::audio::{query_sample_rate, AudioOutput};
-use crate::synth::engine::SynthEngine;
+use crate::synth::engine::SynthPool;
 use crate::ui::file_browser::{BrowseTarget, FileBrowser};
 use crate::ui::input::{handle_winit_input, InputResult};
 use crate::ui::render::render;
@@ -130,7 +130,7 @@ impl UmpApp {
         log_info!("SF2: file={}, size={} bytes", sf2_path, sf2_bytes.len());
 
         let (midi_data, tempo_map) = parse_midi(&midi_bytes)?;
-        let synth = SynthEngine::new(&sf2_bytes, self.sample_rate)?;
+        let synth = SynthPool::single(&sf2_bytes, self.sample_rate)?;
         let shared = Arc::new(SharedState::new());
 
         {
