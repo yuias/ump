@@ -9,6 +9,18 @@
 # Most recently used soundfont (auto-updated by the app)
 # recent_path = "C:/Users/you/Music/FluidR3_GM.sf2"
 
+# Mode-specific soundfont bundles (optional).
+# Each bundle defines one or more SF2 files and per-channel routing.
+# When a MIDI mode is detected or manually selected (1-4 keys),
+# the matching bundle is loaded automatically.
+#
+# [soundfont.bundles.GS]
+# files = ["gs.sf2", "gs_drums.sf2"]
+# routing = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
+#
+# [soundfont.bundles.XG]
+# files = ["xg.sf2"]
+
 [audio]
 # Application volume (0-100)
 volume = 80
@@ -31,6 +43,9 @@ size = 14.0
 [display]
 # Show piano roll on startup
 show_piano_roll = true
+
+# Piano roll orientation: false = horizontal (default), true = vertical
+piano_roll_vertical = false
 
 # Track view mode: "Default" (16-channel grid) or "Detail" (per-track tree)
 track_view_mode = "Default"

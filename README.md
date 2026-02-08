@@ -9,7 +9,8 @@ Built with Rust, using hardware-accelerated rendering (Direct2D or wgpu) and a c
 ## Features
 
 - **SF2 Soundfont Synthesis** -- Real-time MIDI rendering via a [rustysynth](https://github.com/sinshu/rustysynth) fork with cubic interpolation, FDN reverb, multi-voice chorus, SVF filter, and SF2 modulator support
-- **Piano Roll** -- Scrolling note visualization with per-channel coloring
+- **Multi-SF2 Bundles** -- Load multiple SF2 files with per-channel routing; configure mode-specific bundles (GM/GS/XG/GM2) that auto-switch on detection
+- **Piano Roll** -- Scrolling note visualization with per-channel coloring; horizontal (default) and vertical (step-sequencer style) modes
 - **Track List** -- Two view modes: Default (16-channel grid with bank/reverb/chorus state) and Detail (per-track tree)
 - **MIDI Mode Detection** -- Auto-detects GM/GS/XG/GM2 from SysEx reset messages and bank select patterns; manual override with `1`-`4` keys
 - **Per-Track Mute** -- Mute/unmute individual channels during playback
@@ -29,6 +30,7 @@ Built with Rust, using hardware-accelerated rendering (Direct2D or wgpu) and a c
 | `Up` / `Down` | Cursor Up / Down |
 | `M` | Mute / Unmute track |
 | `P` | Toggle piano roll |
+| `V` | Toggle piano roll orientation |
 | `E` | Toggle track view (Detail) |
 | `+` / `-` | Volume Up / Down |
 | `[` / `]` | Zoom Out / In |
@@ -95,13 +97,27 @@ Settings are stored at the platform config directory. See [settings.example.toml
 
 Relative paths in `settings.toml` are resolved against the config directory.
 
+### Multi-SF2 Bundles
+
+You can configure per-mode soundfont bundles with channel routing in `settings.toml`:
+
+```toml
+[soundfont.bundles.GS]
+files = ["gs.sf2", "gs_drums.sf2"]
+routing = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
+```
+
+- `files`: list of SF2 file paths (relative to config directory or absolute)
+- `routing`: channel 0-15 mapped to file index (default: all channels use file 0)
+
+When a MIDI mode is detected or manually selected, the matching bundle is loaded automatically. If no bundle is configured for a mode, the current single SF2 is used.
+
 ## Limitations
 
 - **Linux/macOS support is experimental** -- The wgpu backend is functional but less tested than the D2D backend on Windows.
 - **SysEx support is partial** -- GM/GS/XG/GM2 reset, Master Volume, master tune, scale tuning, and GS drum map changes are processed. Other SysEx commands (e.g. GS part parameters, XG effect settings) are parsed but not fully reproduced.
 - **SF2 modulators are partial** -- SF2 Default Modulators (Phase 1) are implemented. Custom per-preset modulators from `pmod`/`imod` chunks are not yet parsed.
 - **No MIDI output** -- Playback is software-synthesized only. External MIDI device output is not supported.
-- **Single soundfont** -- Only one SF2 file can be loaded at a time. Layering multiple soundfonts is not supported.
 - **No audio device selection** -- Uses the system default audio output device.
 
 ## Dependencies
