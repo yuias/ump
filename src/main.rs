@@ -130,7 +130,7 @@ impl UmpApp {
         log_info!("SF2: file={}, size={} bytes", sf2_path, sf2_bytes.len());
 
         let (midi_data, tempo_map) = parse_midi(&midi_bytes)?;
-        let synth = SynthPool::single(&sf2_bytes, self.sample_rate)?;
+        let synth = SynthPool::single(&sf2_bytes, self.sample_rate, midi_data.port_count)?;
         let shared = Arc::new(SharedState::new());
 
         {
@@ -142,6 +142,7 @@ impl UmpApp {
                     index: t.index,
                     name: t.name.clone(),
                     channel: t.channel,
+                    port: t.port,
                     program: t.program,
                     note_count: t.note_count,
                     channel_note_counts: t.channel_note_counts,

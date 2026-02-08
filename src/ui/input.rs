@@ -106,6 +106,8 @@ fn process_player_key(app: &mut App, event: &KeyEvent, modifiers: ModifiersState
             NamedKey::ArrowUp => app.move_cursor_up(),
             NamedKey::ArrowDown => app.move_cursor_down(),
             NamedKey::Tab => app.cycle_focus(),
+            NamedKey::PageUp => app.prev_port(),
+            NamedKey::PageDown => app.next_port(),
             _ => {}
         }
     }

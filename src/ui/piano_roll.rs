@@ -137,7 +137,7 @@ fn render_horizontal(
         0
     };
 
-    // Precompute muted channel mask
+    // Precompute muted channel mask (u64)
     let muted_mask = app
         .shared
         .muted_channels
@@ -155,7 +155,8 @@ fn render_horizontal(
             continue;
         }
 
-        let muted = muted_mask & (1 << note.channel) != 0;
+        let flat_ch = note.port as u64 * 16 + note.channel as u64;
+        let muted = muted_mask & (1u64 << flat_ch) != 0;
         let color = if muted {
             theme::MUTED_COLOR
         } else {
@@ -287,7 +288,7 @@ fn render_vertical(
         0
     };
 
-    // Precompute muted channel mask
+    // Precompute muted channel mask (u64)
     let muted_mask = app
         .shared
         .muted_channels
@@ -305,7 +306,8 @@ fn render_vertical(
             continue;
         }
 
-        let muted = muted_mask & (1 << note.channel) != 0;
+        let flat_ch = note.port as u64 * 16 + note.channel as u64;
+        let muted = muted_mask & (1u64 << flat_ch) != 0;
         let color = if muted {
             theme::MUTED_COLOR
         } else {

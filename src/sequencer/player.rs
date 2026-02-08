@@ -15,6 +15,7 @@ pub struct Sequencer {
     tempo_map: TempoMap,
     ticks_per_quarter: u16,
     total_ticks: u64,
+    port_count: u8,
 
     /// Current position index into events list.
     event_index: usize,
@@ -33,6 +34,7 @@ impl Sequencer {
             tempo_map,
             ticks_per_quarter: midi_data.ticks_per_quarter,
             total_ticks: midi_data.total_ticks,
+            port_count: midi_data.port_count,
             event_index: 0,
             current_time_secs: 0.0,
             current_tick: 0,
@@ -47,6 +49,7 @@ impl Sequencer {
             tempo_map,
             ticks_per_quarter,
             total_ticks: 0,
+            port_count: 1,
             event_index: 0,
             current_time_secs: 0.0,
             current_tick: 0,
@@ -89,7 +92,12 @@ impl Sequencer {
 
         let volume = shared.get_volume_f32();
         let muted = shared.muted_channels.load(Ordering::Relaxed);
-        synth.set_channel_mute_mask(muted as u16);
+
+        // Sync per-port mute masks to synth engines
+        for p in 0..synth.port_count() as u64 {
+            let port_mask = ((muted >> (p * 16)) & 0xFFFF) as u16;
+            synth.set_channel_mute_mask_for_port(p as u8, port_mask);
+        }
 
         // Process events and render in small chunks to maintain timing accuracy
         let chunk_size = 64;
@@ -151,64 +159,67 @@ impl Sequencer {
         evt: &TimedMidiEvent,
         us_per_quarter: &mut u32,
         synth: &mut SynthPool,
-        muted: u32,
+        muted: u64,
         shared: &Arc<SharedState>,
     ) {
         match &evt.event {
-            MidiEvent::NoteOn { channel, key, vel } => {
-                if muted & (1 << *channel) == 0 {
-                    synth.note_on(*channel as i32, *key as i32, *vel as i32);
+            MidiEvent::NoteOn { port, channel, key, vel } => {
+                let flat_ch = *port as usize * 16 + *channel as usize;
+                if muted & (1u64 << flat_ch) == 0 {
+                    synth.note_on(*port, *channel as i32, *key as i32, *vel as i32);
                 }
-                let ch = *channel as usize;
-                shared.channel_states.velocity[ch]
+                shared.channel_states.velocity[flat_ch]
                     .store(*vel as u32, Ordering::Relaxed);
                 // Update monitor state
-                let prev_tick = shared.monitor.note_tick[ch].load(Ordering::Relaxed);
+                let prev_tick = shared.monitor.note_tick[flat_ch].load(Ordering::Relaxed);
                 let st = if prev_tick > 0 { evt.tick.saturating_sub(prev_tick as u64) as u32 } else { 0 };
-                shared.monitor.note_key[ch].store(*key as u32, Ordering::Relaxed);
-                shared.monitor.note_vel[ch].store(*vel as u32, Ordering::Relaxed);
-                shared.monitor.note_tick[ch].store(evt.tick as u32, Ordering::Relaxed);
-                shared.monitor.step_time[ch].store(st, Ordering::Relaxed);
+                shared.monitor.note_key[flat_ch].store(*key as u32, Ordering::Relaxed);
+                shared.monitor.note_vel[flat_ch].store(*vel as u32, Ordering::Relaxed);
+                shared.monitor.note_tick[flat_ch].store(evt.tick as u32, Ordering::Relaxed);
+                shared.monitor.step_time[flat_ch].store(st, Ordering::Relaxed);
             }
-            MidiEvent::NoteOff { channel, key } => {
-                synth.note_off(*channel as i32, *key as i32);
+            MidiEvent::NoteOff { port, channel, key } => {
+                let flat_ch = *port as usize * 16 + *channel as usize;
+                synth.note_off(*port, *channel as i32, *key as i32);
                 // Update gate time: duration from NoteOn to NoteOff
-                let ch = *channel as usize;
-                let on_tick = shared.monitor.note_tick[ch].load(Ordering::Relaxed);
+                let on_tick = shared.monitor.note_tick[flat_ch].load(Ordering::Relaxed);
                 if on_tick > 0 {
                     let gt = evt.tick.saturating_sub(on_tick as u64) as u32;
-                    shared.monitor.gate_time[ch].store(gt, Ordering::Relaxed);
+                    shared.monitor.gate_time[flat_ch].store(gt, Ordering::Relaxed);
                 }
             }
-            MidiEvent::ProgramChange { channel, program } => {
-                synth.program_change(*channel as i32, *program as i32);
-                shared.channel_states.program[*channel as usize]
+            MidiEvent::ProgramChange { port, channel, program } => {
+                let flat_ch = *port as usize * 16 + *channel as usize;
+                synth.program_change(*port, *channel as i32, *program as i32);
+                shared.channel_states.program[flat_ch]
                     .store(*program as u32, Ordering::Relaxed);
             }
             MidiEvent::ControlChange {
+                port,
                 channel,
                 controller,
                 value,
             } => {
-                synth.control_change(*channel as i32, *controller as i32, *value as i32);
-                let ch = *channel as usize;
+                let flat_ch = *port as usize * 16 + *channel as usize;
+                synth.control_change(*port, *channel as i32, *controller as i32, *value as i32);
                 let v = *value as u32;
                 match *controller {
-                    0 => shared.channel_states.bank[ch].store(v, Ordering::Relaxed),
-                    1 => shared.channel_states.modulation[ch].store(v, Ordering::Relaxed),
-                    7 => shared.channel_states.volume[ch].store(v, Ordering::Relaxed),
-                    10 => shared.channel_states.pan[ch].store(v, Ordering::Relaxed),
-                    11 => shared.channel_states.expression[ch].store(v, Ordering::Relaxed),
-                    64 => shared.channel_states.pedal[ch].store(v, Ordering::Relaxed),
-                    91 => shared.channel_states.reverb[ch].store(v, Ordering::Relaxed),
-                    93 => shared.channel_states.chorus[ch].store(v, Ordering::Relaxed),
+                    0 => shared.channel_states.bank[flat_ch].store(v, Ordering::Relaxed),
+                    1 => shared.channel_states.modulation[flat_ch].store(v, Ordering::Relaxed),
+                    7 => shared.channel_states.volume[flat_ch].store(v, Ordering::Relaxed),
+                    10 => shared.channel_states.pan[flat_ch].store(v, Ordering::Relaxed),
+                    11 => shared.channel_states.expression[flat_ch].store(v, Ordering::Relaxed),
+                    64 => shared.channel_states.pedal[flat_ch].store(v, Ordering::Relaxed),
+                    91 => shared.channel_states.reverb[flat_ch].store(v, Ordering::Relaxed),
+                    93 => shared.channel_states.chorus[flat_ch].store(v, Ordering::Relaxed),
                     _ => {}
                 }
             }
-            MidiEvent::PitchBend { channel, value } => {
-                synth.pitch_bend(*channel as i32, *value);
+            MidiEvent::PitchBend { port, channel, value } => {
+                let flat_ch = *port as usize * 16 + *channel as usize;
+                synth.pitch_bend(*port, *channel as i32, *value);
                 // pitch_bend value from midly is i16 mapped to 0-16383 range
-                shared.channel_states.pitch_bend[*channel as usize]
+                shared.channel_states.pitch_bend[flat_ch]
                     .store(*value as i32 as u32, Ordering::Relaxed);
             }
             MidiEvent::TempoChange(us_per_q) => {
@@ -228,15 +239,17 @@ impl Sequencer {
                     .store(*denominator as u32, Ordering::Relaxed);
             }
             MidiEvent::PolyAftertouch {
+                port,
                 channel,
                 key,
                 pressure,
             } => {
-                synth.poly_aftertouch(*channel as i32, *key as i32, *pressure as i32);
+                synth.poly_aftertouch(*port, *channel as i32, *key as i32, *pressure as i32);
             }
-            MidiEvent::ChannelAftertouch { channel, pressure } => {
-                synth.channel_aftertouch(*channel as i32, *pressure as i32);
-                shared.channel_states.aftertouch[*channel as usize]
+            MidiEvent::ChannelAftertouch { port, channel, pressure } => {
+                let flat_ch = *port as usize * 16 + *channel as usize;
+                synth.channel_aftertouch(*port, *channel as i32, *pressure as i32);
+                shared.channel_states.aftertouch[flat_ch]
                     .store(*pressure as u32, Ordering::Relaxed);
             }
             MidiEvent::SysEx(data) => {
@@ -248,22 +261,24 @@ impl Sequencer {
                         SysExCommand::SystemReset(_) => {
                             synth.system_reset();
                             shared.channel_states.reset();
-                            shared.drum_channels.store(1 << 9, Ordering::Relaxed);
+                            let pc = shared.port_count.load(Ordering::Relaxed) as u8;
+                            shared.init_drum_channels(pc);
                             shared.master_volume.store(127, Ordering::Relaxed);
                         }
                         SysExCommand::GsDrumMap { channel, is_drum } => {
-                            let ch = channel as i32;
-                            synth.set_percussion_channel(channel as usize, is_drum);
-                            synth.control_change(ch, 0, 0);
-                            synth.program_change(ch, 0);
+                            // SysEx has no port context — apply to port 0
+                            synth.set_percussion_channel(0, channel as usize, is_drum);
+                            synth.control_change(0, channel as i32, 0, 0);
+                            synth.program_change(0, channel as i32, 0);
+                            let flat_ch = channel as u64;
                             if is_drum {
                                 let _ = shared
                                     .drum_channels
-                                    .fetch_or(1 << channel, Ordering::Relaxed);
+                                    .fetch_or(1u64 << flat_ch, Ordering::Relaxed);
                             } else {
                                 let _ = shared
                                     .drum_channels
-                                    .fetch_and(!(1 << channel), Ordering::Relaxed);
+                                    .fetch_and(!(1u64 << flat_ch), Ordering::Relaxed);
                             }
                         }
                         SysExCommand::MasterVolume(msb) => {
@@ -284,8 +299,11 @@ impl Sequencer {
     ) {
         // Reset synthesizer
         synth.reset();
-        for ch in 0..16usize {
-            synth.set_percussion_channel(ch, ch == 9);
+        let pc = synth.port_count();
+        for p in 0..pc {
+            for ch in 0..16usize {
+                synth.set_percussion_channel(p, ch, ch == 9);
+            }
         }
 
         // Reset sequencer state
@@ -294,7 +312,7 @@ impl Sequencer {
 
         // Reset channel states
         shared.channel_states.reset();
-        shared.drum_channels.store(1 << 9, Ordering::Relaxed);
+        shared.init_drum_channels(pc);
         shared.monitor.reset();
 
         // Replay all state-setting events (program changes, control changes, tempo)
@@ -306,28 +324,30 @@ impl Sequencer {
             }
 
             match &evt.event {
-                MidiEvent::ProgramChange { channel, program } => {
-                    synth.program_change(*channel as i32, *program as i32);
-                    shared.channel_states.program[*channel as usize]
+                MidiEvent::ProgramChange { port, channel, program } => {
+                    let flat_ch = *port as usize * 16 + *channel as usize;
+                    synth.program_change(*port, *channel as i32, *program as i32);
+                    shared.channel_states.program[flat_ch]
                         .store(*program as u32, Ordering::Relaxed);
                 }
                 MidiEvent::ControlChange {
+                    port,
                     channel,
                     controller,
                     value,
                 } => {
-                    synth.control_change(*channel as i32, *controller as i32, *value as i32);
-                    let ch = *channel as usize;
+                    let flat_ch = *port as usize * 16 + *channel as usize;
+                    synth.control_change(*port, *channel as i32, *controller as i32, *value as i32);
                     let v = *value as u32;
                     match *controller {
-                        0 => shared.channel_states.bank[ch].store(v, Ordering::Relaxed),
-                        1 => shared.channel_states.modulation[ch].store(v, Ordering::Relaxed),
-                        7 => shared.channel_states.volume[ch].store(v, Ordering::Relaxed),
-                        10 => shared.channel_states.pan[ch].store(v, Ordering::Relaxed),
-                        11 => shared.channel_states.expression[ch].store(v, Ordering::Relaxed),
-                        64 => shared.channel_states.pedal[ch].store(v, Ordering::Relaxed),
-                        91 => shared.channel_states.reverb[ch].store(v, Ordering::Relaxed),
-                        93 => shared.channel_states.chorus[ch].store(v, Ordering::Relaxed),
+                        0 => shared.channel_states.bank[flat_ch].store(v, Ordering::Relaxed),
+                        1 => shared.channel_states.modulation[flat_ch].store(v, Ordering::Relaxed),
+                        7 => shared.channel_states.volume[flat_ch].store(v, Ordering::Relaxed),
+                        10 => shared.channel_states.pan[flat_ch].store(v, Ordering::Relaxed),
+                        11 => shared.channel_states.expression[flat_ch].store(v, Ordering::Relaxed),
+                        64 => shared.channel_states.pedal[flat_ch].store(v, Ordering::Relaxed),
+                        91 => shared.channel_states.reverb[flat_ch].store(v, Ordering::Relaxed),
+                        93 => shared.channel_states.chorus[flat_ch].store(v, Ordering::Relaxed),
                         _ => {}
                     }
                 }
@@ -347,13 +367,15 @@ impl Sequencer {
                         .time_sig_den
                         .store(*denominator as u32, Ordering::Relaxed);
                 }
-                MidiEvent::PitchBend { channel, value } => {
-                    shared.channel_states.pitch_bend[*channel as usize]
+                MidiEvent::PitchBend { port, channel, value } => {
+                    let flat_ch = *port as usize * 16 + *channel as usize;
+                    shared.channel_states.pitch_bend[flat_ch]
                         .store(*value as u32, Ordering::Relaxed);
                 }
-                MidiEvent::ChannelAftertouch { channel, pressure } => {
-                    synth.channel_aftertouch(*channel as i32, *pressure as i32);
-                    shared.channel_states.aftertouch[*channel as usize]
+                MidiEvent::ChannelAftertouch { port, channel, pressure } => {
+                    let flat_ch = *port as usize * 16 + *channel as usize;
+                    synth.channel_aftertouch(*port, *channel as i32, *pressure as i32);
+                    shared.channel_states.aftertouch[flat_ch]
                         .store(*pressure as u32, Ordering::Relaxed);
                 }
                 MidiEvent::SysEx(data) => {
@@ -365,22 +387,22 @@ impl Sequencer {
                             SysExCommand::SystemReset(_) => {
                                 synth.system_reset();
                                 shared.channel_states.reset();
-                                shared.drum_channels.store(1 << 9, Ordering::Relaxed);
+                                shared.init_drum_channels(pc);
                                 shared.master_volume.store(127, Ordering::Relaxed);
                             }
                             SysExCommand::GsDrumMap { channel, is_drum } => {
-                                let ch = channel as i32;
-                                synth.set_percussion_channel(channel as usize, is_drum);
-                                synth.control_change(ch, 0, 0);
-                                synth.program_change(ch, 0);
+                                synth.set_percussion_channel(0, channel as usize, is_drum);
+                                synth.control_change(0, channel as i32, 0, 0);
+                                synth.program_change(0, channel as i32, 0);
+                                let flat_ch = channel as u64;
                                 if is_drum {
                                     let _ = shared
                                         .drum_channels
-                                        .fetch_or(1 << channel, Ordering::Relaxed);
+                                        .fetch_or(1u64 << flat_ch, Ordering::Relaxed);
                                 } else {
                                     let _ = shared
                                         .drum_channels
-                                        .fetch_and(!(1 << channel), Ordering::Relaxed);
+                                        .fetch_and(!(1u64 << flat_ch), Ordering::Relaxed);
                                 }
                             }
                             SysExCommand::MasterVolume(msb) => {
@@ -398,7 +420,10 @@ impl Sequencer {
 
         // Re-sync mute mask after state rebuild (synth.reset() may clear it)
         let muted = shared.muted_channels.load(Ordering::Relaxed);
-        synth.set_channel_mute_mask(muted as u16);
+        for p in 0..pc as u64 {
+            let port_mask = ((muted >> (p * 16)) & 0xFFFF) as u16;
+            synth.set_channel_mute_mask_for_port(p as u8, port_mask);
+        }
 
         // Set time position
         self.current_tick = target_tick;

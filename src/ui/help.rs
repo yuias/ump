@@ -19,6 +19,7 @@ const BINDINGS: &[(&str, &str)] = &[
     ("O", "Open MIDI file"),
     ("F", "Open SF2 file"),
     ("D", "Reset SF2 to default"),
+    ("PgUp/PgDn", "Switch port (multi-port)"),
     ("1-4", "Set mode (GM/GS/XG/GM2)"),
     ("?", "Toggle this help"),
     ("Q / Esc", "Quit"),

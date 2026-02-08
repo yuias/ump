@@ -3,33 +3,36 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Mutex;
 
+use crate::midi::event::MAX_CHANNELS;
+
 /// Per-channel MIDI state for Extended track display.
 /// All values updated atomically from the audio thread.
+/// Indexed by flat channel: port * 16 + channel (0..63).
 pub struct ChannelStates {
     /// Current program number (0-127).
-    pub program: [AtomicU32; 16],
+    pub program: [AtomicU32; MAX_CHANNELS],
     /// CC7 Volume (0-127).
-    pub volume: [AtomicU32; 16],
+    pub volume: [AtomicU32; MAX_CHANNELS],
     /// CC11 Expression (0-127).
-    pub expression: [AtomicU32; 16],
+    pub expression: [AtomicU32; MAX_CHANNELS],
     /// CC10 Pan (0-127, 64=center).
-    pub pan: [AtomicU32; 16],
+    pub pan: [AtomicU32; MAX_CHANNELS],
     /// CC1 Modulation (0-127).
-    pub modulation: [AtomicU32; 16],
+    pub modulation: [AtomicU32; MAX_CHANNELS],
     /// Pitch bend (0-16383, 8192=center).
-    pub pitch_bend: [AtomicU32; 16],
+    pub pitch_bend: [AtomicU32; MAX_CHANNELS],
     /// CC64 Sustain pedal (0=off, 127=on).
-    pub pedal: [AtomicU32; 16],
+    pub pedal: [AtomicU32; MAX_CHANNELS],
     /// Channel aftertouch / pressure (0-127).
-    pub aftertouch: [AtomicU32; 16],
+    pub aftertouch: [AtomicU32; MAX_CHANNELS],
     /// Last note-on velocity (0-127), for activity display.
-    pub velocity: [AtomicU32; 16],
+    pub velocity: [AtomicU32; MAX_CHANNELS],
     /// CC0 Bank Select MSB (0-127).
-    pub bank: [AtomicU32; 16],
+    pub bank: [AtomicU32; MAX_CHANNELS],
     /// CC91 Reverb Send (0-127).
-    pub reverb: [AtomicU32; 16],
+    pub reverb: [AtomicU32; MAX_CHANNELS],
     /// CC93 Chorus Send (0-127).
-    pub chorus: [AtomicU32; 16],
+    pub chorus: [AtomicU32; MAX_CHANNELS],
 }
 
 impl ChannelStates {
@@ -52,7 +55,7 @@ impl ChannelStates {
 
     /// Reset all channel states to defaults.
     pub fn reset(&self) {
-        for i in 0..16 {
+        for i in 0..MAX_CHANNELS {
             self.program[i].store(0, Ordering::Relaxed);
             self.volume[i].store(100, Ordering::Relaxed);
             self.expression[i].store(127, Ordering::Relaxed);
@@ -71,17 +74,18 @@ impl ChannelStates {
 
 /// Per-channel MIDI monitor data for tracker-style display.
 /// Updated atomically from the audio thread on NoteOn/NoteOff events.
+/// Indexed by flat channel: port * 16 + channel (0..63).
 pub struct MonitorState {
     /// Last NoteOn key per channel (0xFFFF = no note yet).
-    pub note_key: [AtomicU32; 16],
+    pub note_key: [AtomicU32; MAX_CHANNELS],
     /// Last NoteOn velocity per channel.
-    pub note_vel: [AtomicU32; 16],
+    pub note_vel: [AtomicU32; MAX_CHANNELS],
     /// Tick of last NoteOn per channel.
-    pub note_tick: [AtomicU32; 16],
+    pub note_tick: [AtomicU32; MAX_CHANNELS],
     /// Step time: ticks since previous NoteOn on same channel.
-    pub step_time: [AtomicU32; 16],
+    pub step_time: [AtomicU32; MAX_CHANNELS],
     /// Gate time: duration in ticks of last completed note.
-    pub gate_time: [AtomicU32; 16],
+    pub gate_time: [AtomicU32; MAX_CHANNELS],
 }
 
 impl MonitorState {
@@ -96,7 +100,7 @@ impl MonitorState {
     }
 
     pub fn reset(&self) {
-        for i in 0..16 {
+        for i in 0..MAX_CHANNELS {
             self.note_key[i].store(0xFFFF, Ordering::Relaxed);
             self.note_vel[i].store(0, Ordering::Relaxed);
             self.note_tick[i].store(0, Ordering::Relaxed);
@@ -122,8 +126,8 @@ pub struct SharedState {
     pub seek_tick: AtomicU64,
     /// Whether the sequencer has reached the end of the file.
     pub finished: AtomicBool,
-    /// Per-channel mute flags (bitfield, bit N = channel N muted).
-    pub muted_channels: AtomicU32,
+    /// Per-channel mute flags (bitfield, bit N = flat channel N muted).
+    pub muted_channels: AtomicU64,
     /// Current BPM * 100 (to avoid floats in atomic).
     pub current_bpm_x100: AtomicU32,
     /// Current time signature numerator.
@@ -134,10 +138,12 @@ pub struct SharedState {
     pub track_info: Mutex<Vec<super::TrackInfoSnapshot>>,
     /// Per-channel MIDI state (updated in real-time from audio thread).
     pub channel_states: ChannelStates,
-    /// Drum channel bitfield: bit N = channel N is drum. Default: 1 << 9.
-    pub drum_channels: AtomicU32,
+    /// Drum channel bitfield: bit N = flat channel N is drum. Default: 1 << 9.
+    pub drum_channels: AtomicU64,
     /// Per-channel MIDI monitor data for tracker-style display.
     pub monitor: MonitorState,
+    /// Number of MIDI ports (1-4). Set once at MIDI load.
+    pub port_count: AtomicU32,
 }
 
 /// Snapshot of track info for UI display.
@@ -147,6 +153,7 @@ pub struct TrackInfoSnapshot {
     pub index: usize,
     pub name: String,
     pub channel: Option<u8>,
+    pub port: u8,
     pub program: Option<u8>,
     pub note_count: u32,
     pub channel_note_counts: [u32; 16],
@@ -163,14 +170,15 @@ impl SharedState {
             master_volume: AtomicU32::new(127),
             seek_tick: AtomicU64::new(0),
             finished: AtomicBool::new(false),
-            muted_channels: AtomicU32::new(0),
+            muted_channels: AtomicU64::new(0),
             current_bpm_x100: AtomicU32::new(12000), // 120.00 BPM
             time_sig_num: AtomicU32::new(4),
             time_sig_den: AtomicU32::new(2), // 2^2 = 4
             track_info: Mutex::new(Vec::new()),
             channel_states: ChannelStates::new(),
-            drum_channels: AtomicU32::new(1 << 9),
+            drum_channels: AtomicU64::new(1 << 9),
             monitor: MonitorState::new(),
+            port_count: AtomicU32::new(1),
         }
     }
 
@@ -206,16 +214,29 @@ impl SharedState {
         app_vol * master_vol
     }
 
+    /// Check if a channel is muted. Uses flat index: port * 16 + channel.
     #[allow(dead_code)]
-    pub fn is_channel_muted(&self, channel: u8) -> bool {
+    pub fn is_channel_muted(&self, port: u8, channel: u8) -> bool {
+        let flat = port as u64 * 16 + channel as u64;
         let mask = self.muted_channels.load(Ordering::Relaxed);
-        mask & (1 << channel) != 0
+        mask & (1u64 << flat) != 0
     }
 
-    pub fn toggle_channel_mute(&self, channel: u8) {
-        let bit = 1u32 << channel;
+    /// Toggle mute for a channel. Uses flat index: port * 16 + channel.
+    pub fn toggle_channel_mute(&self, port: u8, channel: u8) {
+        let flat = port as u64 * 16 + channel as u64;
+        let bit = 1u64 << flat;
         let _ = self
             .muted_channels
             .fetch_xor(bit, Ordering::Relaxed);
+    }
+
+    /// Initialize drum channel bits for all ports.
+    pub fn init_drum_channels(&self, port_count: u8) {
+        let mut mask = 0u64;
+        for p in 0..port_count as u64 {
+            mask |= 1u64 << (p * 16 + 9);
+        }
+        self.drum_channels.store(mask, Ordering::Relaxed);
     }
 }

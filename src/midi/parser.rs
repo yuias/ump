@@ -26,7 +26,8 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
     let mut all_note_rects = Vec::new();
     let mut track_infos = Vec::new();
     let mut tempo_changes: Vec<(u64, u32)> = Vec::new();
-    let mut used_channels: u16 = 0;
+    let mut used_channels: u64 = 0;
+    let mut max_port: u8 = 0;
 
     for (track_idx, track) in smf.tracks.iter().enumerate() {
         let mut abs_tick: u64 = 0;
@@ -34,9 +35,12 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
         let mut note_count: u32 = 0;
         let mut channel_counts = [0u32; 16];
         let mut program_by_channel = [None::<u8>; 16];
+        let mut current_port: u8 = 0;
+        let mut track_port: u8 = 0;
+        let mut port_set = false;
 
-        // Active notes: (key, channel) -> (start_tick, velocity)
-        let mut active_notes: std::collections::HashMap<(u8, u8), (u64, u8)> =
+        // Active notes: (key, channel, port) -> (start_tick, velocity)
+        let mut active_notes: std::collections::HashMap<(u8, u8, u8), (u64, u8)> =
             std::collections::HashMap::new();
 
         for event in track {
@@ -45,6 +49,7 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
             match event.kind {
                 TrackEventKind::Midi { channel, message } => {
                     let ch = channel.as_int();
+                    let port = current_port;
                     match message {
                         MidiMessage::NoteOn { key, vel } => {
                             let k = key.as_int();
@@ -52,11 +57,12 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
                             if v == 0 {
                                 // Note-off via velocity 0
                                 if let Some((start, velocity)) =
-                                    active_notes.remove(&(k, ch))
+                                    active_notes.remove(&(k, ch, port))
                                 {
                                     all_note_rects.push(NoteRect {
                                         key: k,
                                         channel: ch,
+                                        port,
                                         start_tick: start,
                                         end_tick: abs_tick,
                                         velocity,
@@ -65,30 +71,32 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
                                 }
                                 all_events.push(TimedMidiEvent {
                                     tick: abs_tick,
-                                    event: MidiEvent::NoteOff { channel: ch, key: k },
+                                    event: MidiEvent::NoteOff { port, channel: ch, key: k },
                                     track: track_idx,
                                 });
                             } else {
-                                // Close any existing note on same key/channel
+                                // Close any existing note on same key/channel/port
                                 if let Some((start, velocity)) =
-                                    active_notes.remove(&(k, ch))
+                                    active_notes.remove(&(k, ch, port))
                                 {
                                     all_note_rects.push(NoteRect {
                                         key: k,
                                         channel: ch,
+                                        port,
                                         start_tick: start,
                                         end_tick: abs_tick,
                                         velocity,
                                         track: track_idx,
                                     });
                                 }
-                                active_notes.insert((k, ch), (abs_tick, v));
+                                active_notes.insert((k, ch, port), (abs_tick, v));
                                 note_count += 1;
                                 channel_counts[ch as usize] += 1;
-                                used_channels |= 1 << ch;
+                                used_channels |= 1u64 << (port as u64 * 16 + ch as u64);
                                 all_events.push(TimedMidiEvent {
                                     tick: abs_tick,
                                     event: MidiEvent::NoteOn {
+                                        port,
                                         channel: ch,
                                         key: k,
                                         vel: v,
@@ -99,11 +107,12 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
                         }
                         MidiMessage::NoteOff { key, vel: _ } => {
                             let k = key.as_int();
-                            if let Some((start, velocity)) = active_notes.remove(&(k, ch))
+                            if let Some((start, velocity)) = active_notes.remove(&(k, ch, port))
                             {
                                 all_note_rects.push(NoteRect {
                                     key: k,
                                     channel: ch,
+                                    port,
                                     start_tick: start,
                                     end_tick: abs_tick,
                                     velocity,
@@ -112,7 +121,7 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
                             }
                             all_events.push(TimedMidiEvent {
                                 tick: abs_tick,
-                                event: MidiEvent::NoteOff { channel: ch, key: k },
+                                event: MidiEvent::NoteOff { port, channel: ch, key: k },
                                 track: track_idx,
                             });
                         }
@@ -122,6 +131,7 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
                             all_events.push(TimedMidiEvent {
                                 tick: abs_tick,
                                 event: MidiEvent::ProgramChange {
+                                    port,
                                     channel: ch,
                                     program: p,
                                 },
@@ -132,6 +142,7 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
                             all_events.push(TimedMidiEvent {
                                 tick: abs_tick,
                                 event: MidiEvent::ControlChange {
+                                    port,
                                     channel: ch,
                                     controller: controller.as_int(),
                                     value: value.as_int(),
@@ -143,6 +154,7 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
                             all_events.push(TimedMidiEvent {
                                 tick: abs_tick,
                                 event: MidiEvent::PitchBend {
+                                    port,
                                     channel: ch,
                                     value: bend.as_int(),
                                 },
@@ -153,6 +165,7 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
                             all_events.push(TimedMidiEvent {
                                 tick: abs_tick,
                                 event: MidiEvent::PolyAftertouch {
+                                    port,
                                     channel: ch,
                                     key: key.as_int(),
                                     pressure: vel.as_int(),
@@ -164,6 +177,7 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
                             all_events.push(TimedMidiEvent {
                                 tick: abs_tick,
                                 event: MidiEvent::ChannelAftertouch {
+                                    port,
                                     channel: ch,
                                     pressure: vel.as_int(),
                                 },
@@ -197,6 +211,16 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
                             track: track_idx,
                         });
                     }
+                    MetaMessage::MidiPort(port_u7) => {
+                        current_port = port_u7.as_int().min(3);
+                        if !port_set {
+                            track_port = current_port;
+                            port_set = true;
+                        }
+                        if current_port > max_port {
+                            max_port = current_port;
+                        }
+                    }
                     _ => {}
                 },
                 TrackEventKind::SysEx(data) => {
@@ -211,10 +235,11 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
         }
 
         // Close any remaining active notes at the track end
-        for ((k, ch), (start, velocity)) in active_notes.drain() {
+        for ((k, ch, port), (start, velocity)) in active_notes.drain() {
             all_note_rects.push(NoteRect {
                 key: k,
                 channel: ch,
+                port,
                 start_tick: start,
                 end_tick: abs_tick,
                 velocity,
@@ -235,6 +260,7 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
             index: track_idx,
             name: track_name,
             channel: primary_channel,
+            port: track_port,
             program,
             note_count,
             channel_note_counts: channel_counts,
@@ -255,6 +281,8 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
     tempo_changes.dedup_by_key(|e| e.0);
     let tempo_map = TempoMap::new(ticks_per_quarter, &tempo_changes);
 
+    let port_count = (max_port + 1).max(1);
+
     let midi_data = MidiData {
         ticks_per_quarter,
         format,
@@ -263,12 +291,13 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
         tracks: track_infos,
         total_ticks,
         used_channels,
+        port_count,
     };
 
     log_info!(
-        "Parse complete: format={}, tracks={}, events={}, notes={}, ticks={}, tpq={}",
+        "Parse complete: format={}, tracks={}, events={}, notes={}, ticks={}, tpq={}, ports={}",
         format, midi_data.tracks.len(), midi_data.events.len(),
-        midi_data.note_rects.len(), total_ticks, ticks_per_quarter
+        midi_data.note_rects.len(), total_ticks, ticks_per_quarter, port_count
     );
 
     Ok((midi_data, tempo_map))

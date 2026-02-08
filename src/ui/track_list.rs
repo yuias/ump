@@ -11,17 +11,45 @@ use crate::ui::theme;
 
 /// Minimum content rows for the Default (extended) view:
 /// Ch header(1) + param rows(11) + separator(1) + activity bars(3) = 16
-pub const EXTENDED_MIN_CONTENT_ROWS: u16 = 16;
+/// +1 for optional port tab row
+pub const EXTENDED_MIN_CONTENT_ROWS: u16 = 17;
 
 /// Represents a single row in the flattened Detail view.
 #[derive(Debug, Clone)]
 pub enum RawRow {
     TrackHeader { track_idx: usize },
-    Channel { track_idx: usize, channel: u8 },
+    Channel { track_idx: usize, port: u8, channel: u8 },
 }
 
-/// Build the flat row list for the Detail tree view.
-pub fn build_raw_rows(tracks: &[TrackInfoSnapshot]) -> Vec<RawRow> {
+/// Build the flat row list for the current view mode.
+pub fn build_raw_rows(
+    tracks: &[TrackInfoSnapshot],
+    port_count: u8,
+    current_port: u8,
+    mode: TrackViewMode,
+) -> Vec<RawRow> {
+    match mode {
+        TrackViewMode::Default => build_default_rows(port_count, current_port),
+        TrackViewMode::Detail => build_detail_rows(tracks),
+    }
+}
+
+/// Build rows for Default mode: 16 channels for the current port.
+fn build_default_rows(port_count: u8, current_port: u8) -> Vec<RawRow> {
+    let mut rows = Vec::new();
+    let port = current_port.min(port_count.saturating_sub(1));
+    for ch in 0..16u8 {
+        rows.push(RawRow::Channel {
+            track_idx: 0,
+            port,
+            channel: ch,
+        });
+    }
+    rows
+}
+
+/// Build rows for Detail mode: track tree with channels.
+fn build_detail_rows(tracks: &[TrackInfoSnapshot]) -> Vec<RawRow> {
     let mut rows = Vec::new();
     for t in tracks {
         if t.note_count == 0 && t.name.is_empty() {
@@ -32,6 +60,7 @@ pub fn build_raw_rows(tracks: &[TrackInfoSnapshot]) -> Vec<RawRow> {
             if t.channel_note_counts[ch as usize] > 0 {
                 rows.push(RawRow::Channel {
                     track_idx: t.index,
+                    port: t.port,
                     channel: ch,
                 });
             }
@@ -40,9 +69,14 @@ pub fn build_raw_rows(tracks: &[TrackInfoSnapshot]) -> Vec<RawRow> {
     rows
 }
 
-/// Return the total number of rows in the Detail tree view.
-pub fn raw_row_count(tracks: &[TrackInfoSnapshot]) -> usize {
-    build_raw_rows(tracks).len()
+/// Return the total number of rows in the current view mode.
+pub fn raw_row_count(
+    tracks: &[TrackInfoSnapshot],
+    port_count: u8,
+    current_port: u8,
+    mode: TrackViewMode,
+) -> usize {
+    build_raw_rows(tracks, port_count, current_port, mode).len()
 }
 
 pub fn render_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App) {
@@ -61,7 +95,7 @@ fn render_raw_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App) {
     let tracks = app.shared.track_info.lock().unwrap();
     let muted_mask = app.shared.muted_channels.load(Ordering::Relaxed);
 
-    let rows = build_raw_rows(&tracks);
+    let rows = build_detail_rows(&tracks);
 
     // Compute scroll offset
     let visible_rows = (area.height / ch) as usize;
@@ -70,6 +104,8 @@ fn render_raw_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App) {
     } else {
         0
     };
+
+    let show_port = app.port_count > 1;
 
     for (i, row) in rows.iter().enumerate().skip(scroll_offset).take(visible_rows) {
         let screen_y = area.y + (i - scroll_offset) as f32 * ch;
@@ -90,12 +126,18 @@ fn render_raw_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App) {
                 } else {
                     t.name.clone()
                 };
-                let text = format!("{}{:<24}({} notes)", prefix, name, t.note_count);
+                let port_label = if show_port {
+                    format!("[P{}] ", t.port + 1)
+                } else {
+                    String::new()
+                };
+                let text = format!("{}{}{:<24}({} notes)", prefix, port_label, name, t.note_count);
                 renderer.draw_text_bold(area.x, screen_y, &text, theme::HEADER_FG, ch);
             }
-            RawRow::Channel { track_idx, channel } => {
+            RawRow::Channel { port, channel, track_idx } => {
                 let ch_idx = *channel;
-                let is_muted = muted_mask & (1 << ch_idx) != 0;
+                let flat_ch = *port as u64 * 16 + ch_idx as u64;
+                let is_muted = muted_mask & (1u64 << flat_ch) != 0;
                 let color = theme::channel_color(ch_idx);
 
                 let t = tracks.iter().find(|t| t.index == *track_idx).unwrap();
@@ -114,9 +156,13 @@ fn render_raw_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App) {
                 let mute_indicator = if is_muted { "M" } else { " " };
 
                 let mut x = area.x;
-                let dot_text = format!("{}  {} ", prefix, dot);
-                renderer.draw_text(x, screen_y, &dot_text, fg, ch);
-                x += dot_text.len() as f32 * cw;
+                let port_prefix = if show_port {
+                    format!("{}  {} P{}:", prefix, dot, port + 1)
+                } else {
+                    format!("{}  {} ", prefix, dot)
+                };
+                renderer.draw_text(x, screen_y, &port_prefix, fg, ch);
+                x += port_prefix.len() as f32 * cw;
 
                 let ch_text = format!("Ch {:>2}  ", ch_idx + 1);
                 renderer.draw_text(x, screen_y, &ch_text, fg, ch);
@@ -145,7 +191,9 @@ fn render_extended_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App
 
     let cs = &app.shared.channel_states;
     let muted_mask = app.shared.muted_channels.load(Ordering::Relaxed);
-    let active_channels = app.used_channels as u32;
+    let current_port = app.current_port;
+    let port_offset = current_port as u64 * 16;
+    let active_channels = app.used_channels;
 
     let label_width = 4.0 * cw;
     let col_width_px = (area.width - label_width) / 16.0;
@@ -157,13 +205,38 @@ fn render_extended_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App
     let dim_fg = theme::BORDER_COLOR;
     let inactive_fg = Color::rgb(40, 40, 50);
 
+    let mut y_offset: f32 = 0.0;
+
+    // Port tabs (only if multi-port)
+    if app.port_count > 1 {
+        let tab_y = area.y;
+        let mut x = area.x;
+        for p in 0..app.port_count {
+            let is_current = p == current_port;
+            let label = format!(" P{} ", p + 1);
+            let fg = if is_current { theme::HEADER_FG } else { dim_fg };
+            if is_current {
+                renderer.fill_rect(
+                    Rect::new(x, tab_y, label.len() as f32 * cw, ch),
+                    theme::SELECTED_BG,
+                );
+                renderer.draw_text_bold(x, tab_y, &label, fg, ch);
+            } else {
+                renderer.draw_text(x, tab_y, &label, fg, ch);
+            }
+            x += label.len() as f32 * cw + cw;
+        }
+        y_offset = ch;
+    }
+
     // Row 0: Channel number header
-    let header_y = area.y;
+    let header_y = area.y + y_offset;
     renderer.draw_text(area.x, header_y, " Ch", label_style_fg, ch);
     for ch_idx in 0..16u8 {
         let x = area.x + label_width + ch_idx as f32 * col_width_px;
-        let is_active = active_channels & (1 << ch_idx) != 0;
-        let is_muted = muted_mask & (1 << ch_idx) != 0;
+        let flat_ch = port_offset + ch_idx as u64;
+        let is_active = active_channels & (1u64 << flat_ch) != 0;
+        let is_muted = muted_mask & (1u64 << flat_ch) != 0;
         let fg = if is_muted {
             theme::MUTED_COLOR
         } else if is_active {
@@ -182,20 +255,21 @@ fn render_extended_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App
     let drum_mask = app.shared.drum_channels.load(Ordering::Relaxed);
 
     let param_labels = ["Prg", "Vol", "Pan", "Exp", "Mod", "Bnd", "Ped", "AT", "Bnk", "Rev", "Cho"];
-    let param_fns: &[&dyn Fn(u8) -> String] = &[
-        &|ch_idx: u8| {
-            let p = cs.program[ch_idx as usize].load(Ordering::Relaxed);
-            if drum_mask & (1 << ch_idx) != 0 {
+    let param_fns: &[&dyn Fn(u8, u64) -> String] = &[
+        &|ch_idx: u8, po: u64| {
+            let flat = po + ch_idx as u64;
+            let p = cs.program[flat as usize].load(Ordering::Relaxed);
+            if drum_mask & (1u64 << flat) != 0 {
                 "Dr".to_string()
             } else {
                 format!("{:>3}", p)
             }
         },
-        &|ch_idx: u8| {
-            format!("{:>3}", cs.volume[ch_idx as usize].load(Ordering::Relaxed))
+        &|ch_idx: u8, po: u64| {
+            format!("{:>3}", cs.volume[(po + ch_idx as u64) as usize].load(Ordering::Relaxed))
         },
-        &|ch_idx: u8| {
-            let v = cs.pan[ch_idx as usize].load(Ordering::Relaxed);
+        &|ch_idx: u8, po: u64| {
+            let v = cs.pan[(po + ch_idx as u64) as usize].load(Ordering::Relaxed);
             if v == 64 {
                 " C ".to_string()
             } else if v < 64 {
@@ -204,41 +278,41 @@ fn render_extended_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App
                 format!("R{:>2}", v - 64)
             }
         },
-        &|ch_idx: u8| {
-            format!("{:>3}", cs.expression[ch_idx as usize].load(Ordering::Relaxed))
+        &|ch_idx: u8, po: u64| {
+            format!("{:>3}", cs.expression[(po + ch_idx as u64) as usize].load(Ordering::Relaxed))
         },
-        &|ch_idx: u8| {
-            format!("{:>3}", cs.modulation[ch_idx as usize].load(Ordering::Relaxed))
+        &|ch_idx: u8, po: u64| {
+            format!("{:>3}", cs.modulation[(po + ch_idx as u64) as usize].load(Ordering::Relaxed))
         },
-        &|ch_idx: u8| {
-            let v = cs.pitch_bend[ch_idx as usize].load(Ordering::Relaxed) as i32 as i16 as i32;
+        &|ch_idx: u8, po: u64| {
+            let v = cs.pitch_bend[(po + ch_idx as u64) as usize].load(Ordering::Relaxed) as i32 as i16 as i32;
             if v == 0 {
                 "  0".to_string()
             } else {
                 format!("{:>+3}", (v * 100 / 8192).clamp(-99, 99))
             }
         },
-        &|ch_idx: u8| {
-            let v = cs.pedal[ch_idx as usize].load(Ordering::Relaxed);
+        &|ch_idx: u8, po: u64| {
+            let v = cs.pedal[(po + ch_idx as u64) as usize].load(Ordering::Relaxed);
             if v >= 64 { " On".to_string() } else { "Off".to_string() }
         },
-        &|ch_idx: u8| {
-            let v = cs.aftertouch[ch_idx as usize].load(Ordering::Relaxed);
+        &|ch_idx: u8, po: u64| {
+            let v = cs.aftertouch[(po + ch_idx as u64) as usize].load(Ordering::Relaxed);
             format!("{:>3}", v)
         },
-        &|ch_idx: u8| {
-            format!("{:>3}", cs.bank[ch_idx as usize].load(Ordering::Relaxed))
+        &|ch_idx: u8, po: u64| {
+            format!("{:>3}", cs.bank[(po + ch_idx as u64) as usize].load(Ordering::Relaxed))
         },
-        &|ch_idx: u8| {
-            format!("{:>3}", cs.reverb[ch_idx as usize].load(Ordering::Relaxed))
+        &|ch_idx: u8, po: u64| {
+            format!("{:>3}", cs.reverb[(po + ch_idx as u64) as usize].load(Ordering::Relaxed))
         },
-        &|ch_idx: u8| {
-            format!("{:>3}", cs.chorus[ch_idx as usize].load(Ordering::Relaxed))
+        &|ch_idx: u8, po: u64| {
+            format!("{:>3}", cs.chorus[(po + ch_idx as u64) as usize].load(Ordering::Relaxed))
         },
     ];
 
     for (row_idx, (label, value_fn)) in param_labels.iter().zip(param_fns.iter()).enumerate() {
-        let y = area.y + (1 + row_idx) as f32 * ch;
+        let y = area.y + y_offset + (1 + row_idx) as f32 * ch;
         if y + ch > area.y + area.height {
             break;
         }
@@ -247,14 +321,15 @@ fn render_extended_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App
 
         for ch_idx in 0..16u8 {
             let x = area.x + label_width + ch_idx as f32 * col_width_px;
-            let is_active = active_channels & (1 << ch_idx) != 0;
-            let is_muted = muted_mask & (1 << ch_idx) != 0;
+            let flat_ch = port_offset + ch_idx as u64;
+            let is_active = active_channels & (1u64 << flat_ch) != 0;
+            let is_muted = muted_mask & (1u64 << flat_ch) != 0;
 
             if !is_active {
                 continue;
             }
 
-            let val = value_fn(ch_idx);
+            let val = value_fn(ch_idx, port_offset);
             let fg = if is_muted { theme::MUTED_COLOR } else { theme::HEADER_FG };
             let display_w = (col_width_px / cw) as usize;
             let s = format!("{:>width$}", val, width = display_w.min(4));
@@ -263,7 +338,7 @@ fn render_extended_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App
     }
 
     // Separator line
-    let sep_y = area.y + (1 + param_labels.len()) as f32 * ch;
+    let sep_y = area.y + y_offset + (1 + param_labels.len()) as f32 * ch;
     if sep_y < area.y + area.height {
         let line_right = (area.x + label_width + 16.0 * col_width_px).min(area.right());
         renderer.draw_hline(sep_y + ch * 0.5, area.x, line_right, theme::BORDER_COLOR, 1.0);
@@ -277,14 +352,15 @@ fn render_extended_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App
 
         for ch_idx in 0..16u8 {
             let x = area.x + label_width + ch_idx as f32 * col_width_px;
-            let is_active = active_channels & (1 << ch_idx) != 0;
-            let is_muted = muted_mask & (1 << ch_idx) != 0;
+            let flat_ch = port_offset + ch_idx as u64;
+            let is_active = active_channels & (1u64 << flat_ch) != 0;
+            let is_muted = muted_mask & (1u64 << flat_ch) != 0;
 
             if !is_active {
                 continue;
             }
 
-            let vel = cs.velocity[ch_idx as usize].load(Ordering::Relaxed);
+            let vel = cs.velocity[flat_ch as usize].load(Ordering::Relaxed);
             if vel == 0 {
                 continue;
             }

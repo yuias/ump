@@ -1,5 +1,9 @@
 //! Internal MIDI event types, decoupled from midly.
 
+pub const MAX_PORTS: u8 = 4;
+pub const CHANNELS_PER_PORT: u8 = 16;
+pub const MAX_CHANNELS: usize = (MAX_PORTS as usize) * (CHANNELS_PER_PORT as usize); // 64
+
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct TimedMidiEvent {
@@ -13,15 +17,15 @@ pub struct TimedMidiEvent {
 
 #[derive(Debug, Clone)]
 pub enum MidiEvent {
-    NoteOn { channel: u8, key: u8, vel: u8 },
-    NoteOff { channel: u8, key: u8 },
-    ProgramChange { channel: u8, program: u8 },
-    ControlChange { channel: u8, controller: u8, value: u8 },
-    PitchBend { channel: u8, value: i16 },
+    NoteOn { port: u8, channel: u8, key: u8, vel: u8 },
+    NoteOff { port: u8, channel: u8, key: u8 },
+    ProgramChange { port: u8, channel: u8, program: u8 },
+    ControlChange { port: u8, channel: u8, controller: u8, value: u8 },
+    PitchBend { port: u8, channel: u8, value: i16 },
     /// Polyphonic key pressure (aftertouch per note).
-    PolyAftertouch { channel: u8, key: u8, pressure: u8 },
+    PolyAftertouch { port: u8, channel: u8, key: u8, pressure: u8 },
     /// Channel pressure (aftertouch for entire channel).
-    ChannelAftertouch { channel: u8, pressure: u8 },
+    ChannelAftertouch { port: u8, channel: u8, pressure: u8 },
     /// Raw SysEx payload (without F0/F7 framing).
     SysEx(Vec<u8>),
     /// Tempo change in microseconds per quarter note.
@@ -38,6 +42,8 @@ pub struct NoteRect {
     pub key: u8,
     /// MIDI channel (0-15).
     pub channel: u8,
+    /// MIDI port (0-3).
+    pub port: u8,
     /// Start tick.
     pub start_tick: u64,
     /// End tick (exclusive).
@@ -55,6 +61,8 @@ pub struct TrackInfo {
     pub name: String,
     /// Primary channel used by this track (heuristic: most frequent channel).
     pub channel: Option<u8>,
+    /// MIDI port assigned to this track (from FF 21 meta event).
+    pub port: u8,
     /// Program number on the primary channel, if any.
     pub program: Option<u8>,
     /// Total number of note-on events in this track.
@@ -80,6 +88,8 @@ pub struct MidiData {
     pub tracks: Vec<TrackInfo>,
     /// Total duration in ticks.
     pub total_ticks: u64,
-    /// Bitfield of channels that have at least one NoteOn event.
-    pub used_channels: u16,
+    /// Bitfield of channels that have at least one NoteOn event (port*16+ch).
+    pub used_channels: u64,
+    /// Number of MIDI ports used (1-4).
+    pub port_count: u8,
 }

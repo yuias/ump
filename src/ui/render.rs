@@ -35,7 +35,7 @@ fn render_player(renderer: &mut dyn Renderer, app: &mut App) {
         TrackViewMode::Default => track_list::EXTENDED_MIN_CONTENT_ROWS,
         TrackViewMode::Detail => {
             let tracks = app.shared.track_info.lock().unwrap();
-            track_list::raw_row_count(&tracks) as u16
+            track_list::raw_row_count(&tracks, app.port_count, app.current_port, app.track_view_mode) as u16
         }
     };
 
@@ -46,7 +46,13 @@ fn render_player(renderer: &mut dyn Renderer, app: &mut App) {
 
     // Channels title bar (native, TITLE_BAR_BG background)
     let track_title = match app.track_view_mode {
-        TrackViewMode::Default => "Channels",
+        TrackViewMode::Default => {
+            if app.port_count > 1 {
+                "Channels [Port]"
+            } else {
+                "Channels"
+            }
+        }
         TrackViewMode::Detail => "Channels [Detail]",
     };
     render_native_title_bar(renderer, layout.track_title_px, track_title);
@@ -89,7 +95,7 @@ fn render_header_native(renderer: &mut dyn Renderer, app: &App) {
     let (ts_num, ts_den) = app.time_signature();
     let sep = " | ";
 
-    let fields = [
+    let mut fields = vec![
         format!("BPM: {:.1}", bpm),
         format!("{}/{}", ts_num, 1 << ts_den),
         format!("Notes: {}", app.total_notes),
@@ -99,6 +105,10 @@ fn render_header_native(renderer: &mut dyn Renderer, app: &App) {
         format!("SMF {}", app.format),
         format!("Mode: {}", app.midi_mode),
     ];
+
+    if app.port_count > 1 {
+        fields.push(format!("Ports: {}", app.port_count));
+    }
 
     for field in &fields {
         renderer.draw_text(x, y, sep, theme::BORDER_COLOR, ch);

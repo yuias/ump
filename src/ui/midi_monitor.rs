@@ -1,6 +1,7 @@
 //! MIDI Monitor: tracker-style real-time per-channel note data display.
 //! Combines note event data (Location, Note, ST, GT, Vel) with channel
 //! state parameters (Prg, Vol, Pan, Exp, Mod, Bnd, Ped, Bnk, Rev, Cho).
+//! Displays channels for the current port in multi-port mode.
 
 use std::sync::atomic::Ordering;
 
@@ -71,7 +72,12 @@ pub fn render_midi_monitor(
     renderer.fill_rect(title_bar, theme::TITLE_BAR_BG);
     let font_size = ch * 1.02;
     let text_y = area.y + (title_h - font_size) / 2.0;
-    renderer.draw_text(area.x + cw, text_y, "MIDI Monitor", theme::HEADER_FG, font_size);
+    let title = if app.port_count > 1 {
+        format!("MIDI Monitor [P{}]", app.current_port + 1)
+    } else {
+        "MIDI Monitor".to_string()
+    };
+    renderer.draw_text(area.x + cw, text_y, &title, theme::HEADER_FG, font_size);
 
     // Content area
     let content_y = area.y + title_h;
@@ -116,13 +122,16 @@ pub fn render_midi_monitor(
     let ts_den_pow = app.shared.time_sig_den.load(Ordering::Relaxed);
     let tpq = app.ticks_per_quarter as u32;
 
+    let current_port = app.current_port;
+    let port_offset = current_port as u64 * 16;
     let used = app.used_channels;
     let muted_mask = app.shared.muted_channels.load(Ordering::Relaxed);
     let drum_mask = app.shared.drum_channels.load(Ordering::Relaxed);
     let mut row = 0u16;
 
     for ch_idx in 0..16u8 {
-        if used & (1 << ch_idx) == 0 {
+        let flat_ch = port_offset + ch_idx as u64;
+        if used & (1u64 << flat_ch) == 0 {
             continue;
         }
 
@@ -132,9 +141,9 @@ pub fn render_midi_monitor(
         }
 
         let text_y = y + (row_h - data_font) / 2.0;
-        let ci = ch_idx as usize;
+        let ci = flat_ch as usize;
 
-        let muted = muted_mask & (1 << ch_idx) != 0;
+        let muted = muted_mask & (1u64 << flat_ch) != 0;
         let ch_color = if muted {
             theme::MUTED_COLOR
         } else {
@@ -181,7 +190,7 @@ pub fn render_midi_monitor(
         // Channel state columns (always shown if channel is active)
         // Prg
         let prog = cs.program[ci].load(Ordering::Relaxed);
-        let prg_str = if drum_mask & (1 << ch_idx) != 0 {
+        let prg_str = if drum_mask & (1u64 << flat_ch) != 0 {
             " Dr".to_string()
         } else {
             format!("{:>3}", prog)

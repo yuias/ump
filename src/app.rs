@@ -55,8 +55,12 @@ pub struct App {
 
     // Note data for piano roll
     pub note_rects: Vec<NoteRect>,
-    /// Bitfield of channels that have at least one NoteOn event.
-    pub used_channels: u16,
+    /// Bitfield of channels that have at least one NoteOn event (port*16+ch).
+    pub used_channels: u64,
+    /// Number of MIDI ports (1-4).
+    pub port_count: u8,
+    /// Currently displayed port in Default mode (0-based).
+    pub current_port: u8,
 
     // UI state
     pub screen: AppScreen,
@@ -111,6 +115,10 @@ impl App {
             _ => TrackViewMode::Default,
         };
 
+        let port_count = midi_data.port_count;
+        shared.port_count.store(port_count as u32, Ordering::Relaxed);
+        shared.init_drum_channels(port_count);
+
         App {
             shared,
             sequencer,
@@ -128,6 +136,8 @@ impl App {
             midi_mode: "GM".to_string(),
             note_rects: midi_data.note_rects.clone(),
             used_channels: midi_data.used_channels,
+            port_count,
+            current_port: 0,
             screen: AppScreen::Player,
             focus: FocusPanel::TrackList,
             track_cursor: 0,
@@ -185,6 +195,8 @@ impl App {
             midi_mode: String::new(),
             note_rects: Vec::new(),
             used_channels: 0,
+            port_count: 1,
+            current_port: 0,
             screen: AppScreen::FileBrowser,
             focus: FocusPanel::TrackList,
             track_cursor: 0,
@@ -211,13 +223,15 @@ impl App {
         let (midi_data, tempo_map) = parse_midi(&midi_bytes)?;
 
         log_info!(
-            "MIDI: file={}, format={}, tracks={}, notes={}, ticks={}",
+            "MIDI: file={}, format={}, tracks={}, notes={}, ticks={}, ports={}",
             path, midi_data.format, midi_data.tracks.len(),
-            midi_data.note_rects.len(), midi_data.total_ticks
+            midi_data.note_rects.len(), midi_data.total_ticks, midi_data.port_count
         );
 
         // Detect mode
         let detected_mode = crate::midi::mode_detect::detect_mode(&midi_data.events);
+
+        let port_count = midi_data.port_count;
 
         // Replace sequencer
         let new_seq = Sequencer::new(&midi_data, tempo_map.clone());
@@ -226,7 +240,7 @@ impl App {
             *seq = new_seq;
         }
 
-        // Reset synth
+        // Reset synth — recreate with correct port count
         {
             let mut syn = self.synth.lock().unwrap();
             if let Some(ref mut s) = *syn {
@@ -242,7 +256,8 @@ impl App {
         self.shared.seek_tick.store(0, Ordering::Relaxed);
         self.shared.muted_channels.store(0, Ordering::Relaxed);
         self.shared.channel_states.reset();
-        self.shared.drum_channels.store(1 << 9, Ordering::Relaxed);
+        self.shared.port_count.store(port_count as u32, Ordering::Relaxed);
+        self.shared.init_drum_channels(port_count);
         self.shared.master_volume.store(127, Ordering::Relaxed);
         self.shared
             .current_bpm_x100
@@ -260,6 +275,7 @@ impl App {
                     index: t.index,
                     name: t.name.clone(),
                     channel: t.channel,
+                    port: t.port,
                     program: t.program,
                     note_count: t.note_count,
                     channel_note_counts: t.channel_note_counts,
@@ -284,6 +300,8 @@ impl App {
         self.tempo_map = tempo_map;
         self.note_rects = midi_data.note_rects;
         self.used_channels = midi_data.used_channels;
+        self.port_count = port_count;
+        self.current_port = 0;
         self.midi_mode = detected_mode.to_string();
         self.track_cursor = 0;
         self.midi_file_path = Some(path.to_string());
@@ -301,12 +319,12 @@ impl App {
         Ok(())
     }
 
-    /// Reload SF2 file: replace synth engine.
+    /// Reload SF2 file: replace synth engine with multi-port support.
     pub fn reload_sf2(&mut self, path: &str) -> Result<()> {
         let sf2_bytes =
             std::fs::read(path).with_context(|| format!("Failed to read SF2 file: {}", path))?;
         log_info!("SF2: file={}, size={} bytes", path, sf2_bytes.len());
-        let new_synth = SynthPool::single(&sf2_bytes, self.sample_rate)?;
+        let new_synth = SynthPool::single(&sf2_bytes, self.sample_rate, self.port_count)?;
 
         {
             let mut syn = self.synth.lock().unwrap();
@@ -358,7 +376,11 @@ impl App {
         }
 
         let refs: Vec<&[u8]> = sf2_data_list.iter().map(|v| v.as_slice()).collect();
-        let new_pool = SynthPool::new(&refs, routing, self.sample_rate)?;
+        let new_pool = if self.port_count > 1 {
+            SynthPool::new_bundle(&refs, routing, self.sample_rate, self.port_count)?
+        } else {
+            SynthPool::new(&refs, routing, self.sample_rate)?
+        };
 
         {
             let mut syn = self.synth.lock().unwrap();
@@ -499,7 +521,7 @@ impl App {
 
     pub fn move_cursor_down(&mut self) {
         let tracks = self.shared.track_info.lock().unwrap();
-        let max = raw_row_count(&tracks);
+        let max = raw_row_count(&tracks, self.port_count, self.current_port, self.track_view_mode);
         if self.track_cursor + 1 < max {
             self.track_cursor += 1;
         }
@@ -508,9 +530,9 @@ impl App {
     pub fn toggle_mute_selected(&self) {
         use crate::ui::track_list::RawRow;
         let tracks = self.shared.track_info.lock().unwrap();
-        let rows = crate::ui::track_list::build_raw_rows(&tracks);
-        if let Some(RawRow::Channel { channel, .. }) = rows.get(self.track_cursor) {
-            self.shared.toggle_channel_mute(*channel);
+        let rows = crate::ui::track_list::build_raw_rows(&tracks, self.port_count, self.current_port, self.track_view_mode);
+        if let Some(RawRow::Channel { port, channel, .. }) = rows.get(self.track_cursor) {
+            self.shared.toggle_channel_mute(*port, *channel);
         }
         // TrackHeader 行では何もしない
     }
@@ -529,6 +551,20 @@ impl App {
 
     pub fn zoom_out(&mut self) {
         self.zoom_level = (self.zoom_level / 1.25).max(0.25);
+    }
+
+    pub fn next_port(&mut self) {
+        if self.port_count > 1 && self.current_port + 1 < self.port_count {
+            self.current_port += 1;
+            self.track_cursor = 0;
+        }
+    }
+
+    pub fn prev_port(&mut self) {
+        if self.current_port > 0 {
+            self.current_port -= 1;
+            self.track_cursor = 0;
+        }
     }
 
     pub fn set_midi_mode(&mut self, mode: &str) {
@@ -558,7 +594,7 @@ impl App {
 
         // Reset shared channel state
         self.shared.channel_states.reset();
-        self.shared.drum_channels.store(1 << 9, Ordering::Relaxed);
+        self.shared.init_drum_channels(self.port_count);
         self.shared.master_volume.store(127, Ordering::Relaxed);
 
         // Re-seek to current position to replay all state-changing events
