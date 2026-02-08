@@ -13,7 +13,13 @@ impl SynthEngine {
     pub fn new(sf2_data: &[u8], sample_rate: u32) -> Result<Self> {
         let mut cursor = std::io::Cursor::new(sf2_data);
         let sound_font =
-            Arc::new(SoundFont::new(&mut cursor).context("Failed to load SoundFont")?);
+            SoundFont::new(&mut cursor).context("Failed to load SoundFont")?;
+
+        for warn in sound_font.get_warnings() {
+            log_warn!("SF2 sanitize: {}", warn);
+        }
+
+        let sound_font = Arc::new(sound_font);
 
         let mut settings = SynthesizerSettings::new(sample_rate as i32);
         settings.enable_reverb_and_chorus = true;

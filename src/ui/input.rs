@@ -196,7 +196,7 @@ fn handle_browser_enter(app: &mut App) {
             match target {
                 BrowseTarget::Sf2 => {
                     if let Err(e) = app.reload_sf2(&path_str) {
-                        log_warn!("Failed to load SF2: {}", e);
+                        log_warn!("Failed to load SF2: {:#}", e);
                     } else if !app.has_midi() {
                         open_browser(app, BrowseTarget::Midi);
                     } else {
@@ -208,7 +208,7 @@ fn handle_browser_enter(app: &mut App) {
                 }
                 BrowseTarget::Midi => {
                     if let Err(e) = app.reload_midi(&path_str) {
-                        log_warn!("Failed to load MIDI: {}", e);
+                        log_warn!("Failed to load MIDI: {:#}", e);
                     } else if !app.has_sf2() {
                         open_browser(app, BrowseTarget::Sf2);
                     } else {

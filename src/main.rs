@@ -112,7 +112,7 @@ impl UmpApp {
             match self.full_load(midi_p, sf2_p) {
                 Ok(()) => {}
                 Err(e) => {
-                    log_error!("Failed to load: {}", e);
+                    log_error!("Failed to load: {:#}", e);
                     self.browser_start(midi_path, sf2_path);
                 }
             }
@@ -187,7 +187,7 @@ impl UmpApp {
         let mode_str = detected_mode.to_string();
         if let Some(bundle) = app.config.soundfont.resolve_bundle(&mode_str).cloned() {
             if let Err(e) = app.reload_bundle(&bundle) {
-                log_warn!("Failed to load bundle for detected mode {}: {}", mode_str, e);
+                log_warn!("Failed to load bundle for detected mode {}: {:#}", mode_str, e);
             }
         }
 
@@ -209,12 +209,12 @@ impl UmpApp {
 
         if let Some(ref sf2_p) = sf2_path {
             if let Err(e) = app.reload_sf2(sf2_p) {
-                log_warn!("Failed to load SF2: {}", e);
+                log_warn!("Failed to load SF2: {:#}", e);
             }
         }
         if let Some(ref midi_p) = midi_path {
             if let Err(e) = app.reload_midi(midi_p) {
-                log_warn!("Failed to load MIDI: {}", e);
+                log_warn!("Failed to load MIDI: {:#}", e);
             }
         }
 

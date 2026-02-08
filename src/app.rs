@@ -292,7 +292,7 @@ impl App {
         let mode_str = detected_mode.to_string();
         if let Some(bundle) = self.config.soundfont.resolve_bundle(&mode_str).cloned() {
             if let Err(e) = self.reload_bundle(&bundle) {
-                log_warn!("Failed to load bundle for detected mode {}: {}", mode_str, e);
+                log_warn!("Failed to load bundle for detected mode {}: {:#}", mode_str, e);
             }
         } else {
             self.restore_default_sf2();
@@ -391,7 +391,7 @@ impl App {
         let path = self.sf2_file_path.clone().unwrap();
         log_info!("SF2 restoring default: {}", path);
         if let Err(e) = self.reload_sf2(&path) {
-            log_warn!("Failed to restore default SF2: {}", e);
+            log_warn!("Failed to restore default SF2: {:#}", e);
         }
     }
 
@@ -541,7 +541,7 @@ impl App {
                     log_info!("Loaded bundle for mode: {}", mode);
                 }
                 Err(e) => {
-                    log_error!("Failed to load bundle for mode {}: {}", mode, e);
+                    log_error!("Failed to load bundle for mode {}: {:#}", mode, e);
                     // Fall back to standard reset
                 }
             }

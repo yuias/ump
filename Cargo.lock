@@ -1938,7 +1938,7 @@ dependencies = [
 [[package]]
 name = "rustysynth"
 version = "1.3.6"
-source = "git+https://github.com/yuiAs/rustysynth?branch=develop#4be4abcc3882ef9f734bde049970aa39ce22069c"
+source = "git+https://github.com/yuiAs/rustysynth?branch=develop#d37045ad0f5e6eb979b1c5c56e551f2db0d097eb"
 
 [[package]]
 name = "same-file"
