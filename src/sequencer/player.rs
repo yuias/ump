@@ -159,11 +159,26 @@ impl Sequencer {
                 if muted & (1 << *channel) == 0 {
                     synth.note_on(*channel as i32, *key as i32, *vel as i32);
                 }
-                shared.channel_states.velocity[*channel as usize]
+                let ch = *channel as usize;
+                shared.channel_states.velocity[ch]
                     .store(*vel as u32, Ordering::Relaxed);
+                // Update monitor state
+                let prev_tick = shared.monitor.note_tick[ch].load(Ordering::Relaxed);
+                let st = if prev_tick > 0 { evt.tick.saturating_sub(prev_tick as u64) as u32 } else { 0 };
+                shared.monitor.note_key[ch].store(*key as u32, Ordering::Relaxed);
+                shared.monitor.note_vel[ch].store(*vel as u32, Ordering::Relaxed);
+                shared.monitor.note_tick[ch].store(evt.tick as u32, Ordering::Relaxed);
+                shared.monitor.step_time[ch].store(st, Ordering::Relaxed);
             }
             MidiEvent::NoteOff { channel, key } => {
                 synth.note_off(*channel as i32, *key as i32);
+                // Update gate time: duration from NoteOn to NoteOff
+                let ch = *channel as usize;
+                let on_tick = shared.monitor.note_tick[ch].load(Ordering::Relaxed);
+                if on_tick > 0 {
+                    let gt = evt.tick.saturating_sub(on_tick as u64) as u32;
+                    shared.monitor.gate_time[ch].store(gt, Ordering::Relaxed);
+                }
             }
             MidiEvent::ProgramChange { channel, program } => {
                 synth.program_change(*channel as i32, *program as i32);
@@ -280,6 +295,7 @@ impl Sequencer {
         // Reset channel states
         shared.channel_states.reset();
         shared.drum_channels.store(1 << 9, Ordering::Relaxed);
+        shared.monitor.reset();
 
         // Replay all state-setting events (program changes, control changes, tempo)
         // up to target_tick without sounding notes

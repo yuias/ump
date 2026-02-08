@@ -50,6 +50,10 @@ piano_roll_vertical = false
 # Track view mode: "Default" (16-channel grid) or "Detail" (per-track tree)
 track_view_mode = "Default"
 
+# Experimental: show MIDI monitor (tracker-style per-channel note data)
+# in place of the piano roll
+# midi_monitor = true
+
 [debug]
 # Enable verbose debug logging to file
 # verbose = true

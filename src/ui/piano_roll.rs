@@ -345,7 +345,7 @@ fn render_vertical(
 }
 
 /// Note name parts without allocation.
-fn key_name_parts(key: u8) -> (&'static str, i8) {
+pub(crate) fn key_name_parts(key: u8) -> (&'static str, i8) {
     const NAMES: [&str; 12] = [
         "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
     ];

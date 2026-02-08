@@ -6,6 +6,7 @@ use crate::renderer::Renderer;
 use crate::ui::header::format_duration;
 use crate::ui::help::render_help;
 use crate::ui::layout::Layout;
+use crate::ui::midi_monitor::render_midi_monitor;
 use crate::ui::piano_roll::render_piano_roll;
 use crate::ui::status_bar::render_status_bar;
 use crate::ui::theme;
@@ -50,9 +51,13 @@ fn render_player(renderer: &mut dyn Renderer, app: &mut App) {
     };
     render_native_title_bar(renderer, layout.track_title_px, track_title);
 
-    // Piano roll: native D2D drawing
+    // Piano roll or MIDI monitor
     if let Some(pr_px) = layout.piano_roll_px {
-        render_piano_roll(renderer, pr_px, app, &app.note_rects, app.piano_roll_vertical);
+        if app.midi_monitor {
+            render_midi_monitor(renderer, pr_px, app);
+        } else {
+            render_piano_roll(renderer, pr_px, app, &app.note_rects, app.piano_roll_vertical);
+        }
     }
 
     // Render track list, transport, status bar directly

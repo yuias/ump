@@ -64,6 +64,7 @@ pub struct App {
     pub track_cursor: usize,
     pub show_piano_roll: bool,
     pub piano_roll_vertical: bool,
+    pub midi_monitor: bool,
     pub show_help: bool,
     pub track_view_mode: TrackViewMode,
     pub zoom_level: f64,
@@ -104,6 +105,7 @@ impl App {
         }
         let show_piano_roll = config.display.show_piano_roll.unwrap_or(true);
         let piano_roll_vertical = config.display.piano_roll_vertical.unwrap_or(false);
+        let midi_monitor = config.display.midi_monitor.unwrap_or(false);
         let track_view_mode = match config.display.track_view_mode.as_deref() {
             Some("Detail") => TrackViewMode::Detail,
             _ => TrackViewMode::Default,
@@ -131,6 +133,7 @@ impl App {
             track_cursor: 0,
             show_piano_roll,
             piano_roll_vertical,
+            midi_monitor,
             show_help: false,
             track_view_mode,
             zoom_level: 1.0,
@@ -159,6 +162,7 @@ impl App {
 
         let show_piano_roll = config.display.show_piano_roll.unwrap_or(true);
         let piano_roll_vertical = config.display.piano_roll_vertical.unwrap_or(false);
+        let midi_monitor = config.display.midi_monitor.unwrap_or(false);
         let track_view_mode = match config.display.track_view_mode.as_deref() {
             Some("Detail") => TrackViewMode::Detail,
             _ => TrackViewMode::Default,
@@ -186,6 +190,7 @@ impl App {
             track_cursor: 0,
             show_piano_roll,
             piano_roll_vertical,
+            midi_monitor,
             show_help: false,
             track_view_mode,
             zoom_level: 1.0,
