@@ -283,6 +283,14 @@ impl App {
         self.track_cursor = 0;
         self.midi_file_path = Some(path.to_string());
 
+        // Load mode-specific soundfont bundle if configured
+        let mode_str = detected_mode.to_string();
+        if let Some(bundle) = self.config.soundfont.resolve_bundle(&mode_str).cloned() {
+            if let Err(e) = self.reload_bundle(&bundle) {
+                log_warn!("Failed to load bundle for detected mode {}: {}", mode_str, e);
+            }
+        }
+
         Ok(())
     }
 

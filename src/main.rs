@@ -183,6 +183,14 @@ impl UmpApp {
         app.midi_file_path = Some(midi_path.to_string());
         app.sf2_file_path = Some(sf2_path.to_string());
 
+        // Load mode-specific soundfont bundle if configured
+        let mode_str = detected_mode.to_string();
+        if let Some(bundle) = app.config.soundfont.resolve_bundle(&mode_str).cloned() {
+            if let Err(e) = app.reload_bundle(&bundle) {
+                log_warn!("Failed to load bundle for detected mode {}: {}", mode_str, e);
+            }
+        }
+
         let audio = AudioOutput::start(seq, synth, shared, self.sample_rate)?;
         app.audio = Some(audio);
         app.start_playback();
