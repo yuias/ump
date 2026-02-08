@@ -12,7 +12,7 @@ Each task is self-contained and can be implemented independently unless noted ot
 - **Priority**: S (Critical)
 - **Effort**: Small
 - **Impact**: All voices — most cost-effective single improvement
-- **Status**: [ ] Not started
+- **Status**: [x] ✅ Completed (`feature/cubic-interpolation` branch, commit `7980e13`)
 
 ### Problem
 
@@ -59,7 +59,7 @@ output = ((c3 * t + c2) * t + c1) * t + c0
 - **Priority**: A (High)
 - **Effort**: Medium
 - **Impact**: Velocity sensitivity and dynamic expression accuracy
-- **Status**: [ ] Not started
+- **Status**: [x] ✅ Phase 1 completed (`feature/default-modulators`, PR #9)
 
 ### Problem
 
@@ -108,7 +108,7 @@ SF2 2.01 spec §8.4 defines 10 Default Modulators that should always be active. 
 - **Priority**: B (Medium)
 - **Effort**: Small
 - **Impact**: Vibrato / tremolo smoothness
-- **Status**: [ ] Not started
+- **Status**: [x] ✅ Completed (`feature/lfo-interpolation` branch, PR #10)
 
 ### Problem
 
@@ -150,7 +150,7 @@ Then in `voice.rs`, use `slope = (end - start) / block_size` to ramp per sample.
 - **Priority**: B (Medium)
 - **Effort**: Medium-Large
 - **Impact**: Spatial quality and naturalness of reverb tail
-- **Status**: [ ] Not started
+- **Status**: [x] ✅ Completed (`feature/fdn-reverb` branch, PR #11)
 
 ### Problem
 
@@ -199,7 +199,7 @@ Recommendation: FDN or Dattorro. Both are well-documented algorithms with clear 
 - **Priority**: B (Medium)
 - **Effort**: Medium
 - **Impact**: Ensemble richness for chorus-heavy patches
-- **Status**: [ ] Not started
+- **Status**: [x] ✅ Completed (`feature/chorus-multivoice` branch, PR #12)
 
 ### Problem
 
@@ -248,7 +248,7 @@ Additionally, add GM chorus type presets:
 - **Priority**: C (Low)
 - **Effort**: Small
 - **Impact**: Pad and string attack naturalness
-- **Status**: [ ] Not started
+- **Status**: [x] ✅ Completed (`feature/convex-attack` branch, PR #13)
 
 ### Problem
 
@@ -296,7 +296,7 @@ value = 10.0f32.powf(value_db / 200.0)
 - **Priority**: C (Low)
 - **Effort**: Small
 - **Impact**: Polyphony management under heavy load
-- **Status**: [ ] Not started
+- **Status**: [x] ✅ Completed (`feature/voice-stealing` branch, PR #14)
 
 ### Problem
 
@@ -345,7 +345,7 @@ fn priority(&self, requesting_channel: i32, requesting_key: i32) -> f32 {
 - **Priority**: C (Low)
 - **Effort**: Medium
 - **Impact**: Filter stability under rapid parameter changes
-- **Status**: [ ] Not started
+- **Status**: [x] ✅ Completed (`feature/svf-filter` branch, PR #15)
 
 ### Problem
 
