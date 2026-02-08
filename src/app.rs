@@ -63,6 +63,7 @@ pub struct App {
     pub focus: FocusPanel,
     pub track_cursor: usize,
     pub show_piano_roll: bool,
+    pub piano_roll_vertical: bool,
     pub show_help: bool,
     pub track_view_mode: TrackViewMode,
     pub zoom_level: f64,
@@ -102,6 +103,7 @@ impl App {
             shared.volume.store(vol.min(100), Ordering::Relaxed);
         }
         let show_piano_roll = config.display.show_piano_roll.unwrap_or(true);
+        let piano_roll_vertical = config.display.piano_roll_vertical.unwrap_or(false);
         let track_view_mode = match config.display.track_view_mode.as_deref() {
             Some("Detail") => TrackViewMode::Detail,
             _ => TrackViewMode::Default,
@@ -128,6 +130,7 @@ impl App {
             focus: FocusPanel::TrackList,
             track_cursor: 0,
             show_piano_roll,
+            piano_roll_vertical,
             show_help: false,
             track_view_mode,
             zoom_level: 1.0,
@@ -155,6 +158,7 @@ impl App {
         }
 
         let show_piano_roll = config.display.show_piano_roll.unwrap_or(true);
+        let piano_roll_vertical = config.display.piano_roll_vertical.unwrap_or(false);
         let track_view_mode = match config.display.track_view_mode.as_deref() {
             Some("Detail") => TrackViewMode::Detail,
             _ => TrackViewMode::Default,
@@ -181,6 +185,7 @@ impl App {
             focus: FocusPanel::TrackList,
             track_cursor: 0,
             show_piano_roll,
+            piano_roll_vertical,
             show_help: false,
             track_view_mode,
             zoom_level: 1.0,
@@ -432,6 +437,10 @@ impl App {
         self.show_piano_roll = !self.show_piano_roll;
     }
 
+    pub fn toggle_piano_roll_orientation(&mut self) {
+        self.piano_roll_vertical = !self.piano_roll_vertical;
+    }
+
     pub fn zoom_in(&mut self) {
         self.zoom_level = (self.zoom_level * 1.25).min(8.0);
     }
@@ -499,6 +508,7 @@ impl App {
     pub fn save_config(&mut self) {
         self.config.audio.volume = Some(self.volume());
         self.config.display.show_piano_roll = Some(self.show_piano_roll);
+        self.config.display.piano_roll_vertical = Some(self.piano_roll_vertical);
         self.config.display.track_view_mode = Some(
             match self.track_view_mode {
                 TrackViewMode::Default => "Default",

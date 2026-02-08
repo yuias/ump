@@ -52,7 +52,7 @@ fn render_player(renderer: &mut dyn Renderer, app: &mut App) {
 
     // Piano roll: native D2D drawing
     if let Some(pr_px) = layout.piano_roll_px {
-        render_piano_roll(renderer, pr_px, app, &app.note_rects);
+        render_piano_roll(renderer, pr_px, app, &app.note_rects, app.piano_roll_vertical);
     }
 
     // Render track list, transport, status bar directly

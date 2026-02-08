@@ -61,6 +61,7 @@ pub struct WindowConfig {
 pub struct DisplayConfig {
     pub show_piano_roll: Option<bool>,
     pub track_view_mode: Option<String>,
+    pub piano_roll_vertical: Option<bool>,
 }
 
 
