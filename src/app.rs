@@ -288,12 +288,14 @@ impl App {
         self.track_cursor = 0;
         self.midi_file_path = Some(path.to_string());
 
-        // Load mode-specific soundfont bundle if configured
+        // Load mode-specific soundfont bundle, or restore default SF2
         let mode_str = detected_mode.to_string();
         if let Some(bundle) = self.config.soundfont.resolve_bundle(&mode_str).cloned() {
             if let Err(e) = self.reload_bundle(&bundle) {
                 log_warn!("Failed to load bundle for detected mode {}: {}", mode_str, e);
             }
+        } else {
+            self.restore_default_sf2();
         }
 
         Ok(())
@@ -318,6 +320,7 @@ impl App {
 
         self.sf2_name = sf2_name;
         self.sf2_file_path = Some(path.to_string());
+        log_info!("SF2 loaded: {}", self.sf2_name);
 
         // Update config with absolute path
         self.config.soundfont.recent_path = Some(crate::config::to_absolute_path(path));
@@ -363,8 +366,33 @@ impl App {
         }
 
         self.sf2_name = names.join(" + ");
+        log_info!("SF2 loaded (bundle): {}", self.sf2_name);
 
         Ok(())
+    }
+
+    /// Restore default (single) SF2 if a bundle was previously loaded.
+    fn restore_default_sf2(&mut self) {
+        let default_name = self
+            .sf2_file_path
+            .as_ref()
+            .and_then(|p| {
+                std::path::Path::new(p)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+            })
+            .unwrap_or_default();
+
+        if default_name.is_empty() || self.sf2_name == default_name {
+            return;
+        }
+
+        // Bundle was previously loaded — restore default SF2
+        let path = self.sf2_file_path.clone().unwrap();
+        log_info!("SF2 restoring default: {}", path);
+        if let Err(e) = self.reload_sf2(&path) {
+            log_warn!("Failed to restore default SF2: {}", e);
+        }
     }
 
     /// Start audio output if not already running.
@@ -517,6 +545,8 @@ impl App {
                     // Fall back to standard reset
                 }
             }
+        } else {
+            self.restore_default_sf2();
         }
 
         // Reset synth to clean state for the new mode
