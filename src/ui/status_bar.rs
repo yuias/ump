@@ -17,12 +17,12 @@ pub fn render_status_bar(renderer: &mut dyn Renderer, area: Rect) {
         (" Space ", "Play "),
         (" O ", "Open "),
         (" F ", "SF2 "),
+        (" P ", "Panel "),
         (" M ", "Mute "),
         (" +/- ", "Vol "),
-        (" E ", "Ext "),
+        (" E ", "View "),
         (" S ", "Stop "),
         (" ? ", "Help "),
-        (" Q ", "Quit "),
     ];
 
     for (key, desc) in badges {

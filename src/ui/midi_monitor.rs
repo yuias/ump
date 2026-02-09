@@ -8,7 +8,6 @@ use std::sync::atomic::Ordering;
 use crate::app::App;
 use crate::renderer::types::{Color, Rect};
 use crate::renderer::Renderer;
-use crate::ui::layout::TITLE_BAR_HEIGHT;
 use crate::ui::piano_roll::key_name_parts;
 use crate::ui::theme;
 
@@ -63,25 +62,9 @@ pub fn render_midi_monitor(
 
     let (cw, ch) = renderer.cell_size();
 
-    // Clear background
-    renderer.fill_rect(area, crate::renderer::types::BG_COLOR);
-
-    // Title bar
-    let title_h = ch * TITLE_BAR_HEIGHT;
-    let title_bar = Rect::new(area.x, area.y, area.width, title_h);
-    renderer.fill_rect(title_bar, theme::TITLE_BAR_BG);
-    let font_size = ch * 1.02;
-    let text_y = area.y + (title_h - font_size) / 2.0;
-    let title = if app.port_count > 1 {
-        format!("MIDI Monitor [P{}]", app.current_port + 1)
-    } else {
-        "MIDI Monitor".to_string()
-    };
-    renderer.draw_text(area.x + cw, text_y, &title, theme::HEADER_FG, font_size);
-
     // Content area
-    let content_y = area.y + title_h;
-    let row_h = ch * 1.15;
+    let content_y = area.y;
+    let row_h = ch * crate::ui::layout::ROW_HEIGHT;
     let data_font = ch * 0.85;
 
     // Compute column X positions

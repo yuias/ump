@@ -4,14 +4,14 @@ A native GUI MIDI player with SF2 soundfont synthesis.
 
 Built with Rust, using hardware-accelerated rendering (Direct2D or wgpu) and a custom sequencer for low-latency audio playback.
 
-![Screenshot-0.1.0](docs/screenshots/d2d-0.1.0-00.png)
+![Screenshot-0.4.0](docs/screenshots/d2d-0.4.0-00.png)
 
 ## Features
 
 - **SF2 Soundfont Synthesis** -- Real-time MIDI rendering via a [rustysynth](https://github.com/sinshu/rustysynth) fork with cubic interpolation, FDN reverb, multi-voice chorus, SVF filter, and SF2 modulator support
 - **Multi-SF2 Bundles** -- Load multiple SF2 files with per-channel routing; configure mode-specific bundles (GM/GS/XG/GM2) that auto-switch on detection
 - **Piano Roll** -- Scrolling note visualization with per-channel coloring; horizontal (default) and vertical (step-sequencer style) modes
-- **Track List** -- Two view modes: Default (16-channel grid with bank/reverb/chorus state) and Detail (per-track tree)
+- **Track List** -- Left panel with two view modes: Default (compact 2-line per channel with Prg/Vol/Pan/Exp) and Detail (per-track tree)
 - **MIDI Mode Detection** -- Auto-detects GM/GS/XG/GM2 from SysEx reset messages and bank select patterns; manual override with `1`-`4` keys
 - **Per-Track Mute** -- Mute/unmute individual channels during playback
 - **Seek** -- Forward/backward seeking with full state reconstruction (program changes, control changes, pitch bends)
@@ -29,9 +29,9 @@ Built with Rust, using hardware-accelerated rendering (Direct2D or wgpu) and a c
 | `Left` / `Right` | Seek -5s / +5s |
 | `Up` / `Down` | Cursor Up / Down |
 | `M` | Mute / Unmute track |
-| `P` | Toggle piano roll |
+| `P` | Toggle right panel (Monitor / Piano Roll) |
 | `V` | Toggle piano roll orientation |
-| `E` | Toggle track view (Detail) |
+| `E` | Toggle track view (Default / Detail) |
 | `+` / `-` | Volume Up / Down |
 | `[` / `]` | Zoom Out / In |
 | `Tab` | Cycle focus panel |
@@ -134,6 +134,7 @@ When a MIDI mode is detected or manually selected, the matching bundle is loaded
 | [clap](https://crates.io/crates/clap) | Command-line argument parsing |
 | [anyhow](https://crates.io/crates/anyhow) | Error handling |
 | [serde](https://crates.io/crates/serde) / [toml](https://crates.io/crates/toml) | Settings serialization |
+| [unicode-width](https://crates.io/crates/unicode-width) | Unicode display width calculation |
 | [dirs](https://crates.io/crates/dirs) | Platform config directory resolution |
 
 ## License

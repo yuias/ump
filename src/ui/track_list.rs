@@ -1,4 +1,4 @@
-//! Track list panel: Default mode (per-channel grid) and Detail mode (per-track tree).
+//! Track list panel: Default mode (compact per-channel) and Detail mode (per-track tree).
 
 use std::sync::atomic::Ordering;
 
@@ -7,18 +7,14 @@ use crate::renderer::types::{Color, Rect};
 use crate::renderer::Renderer;
 use crate::state::TrackInfoSnapshot;
 use crate::synth::gm::gm_instrument_name;
+use crate::ui::layout::ROW_HEIGHT;
 use crate::ui::theme;
-
-/// Minimum content rows for the Default (extended) view:
-/// Ch header(1) + param rows(11) + separator(1) + activity bars(3) = 16
-/// +1 for optional port tab row
-pub const EXTENDED_MIN_CONTENT_ROWS: u16 = 17;
 
 /// Represents a single row in the flattened Detail view.
 #[derive(Debug, Clone)]
 pub enum RawRow {
     TrackHeader { track_idx: usize },
-    Channel { track_idx: usize, port: u8, channel: u8 },
+    Channel { _track_idx: usize, port: u8, channel: u8 },
 }
 
 /// Build the flat row list for the current view mode.
@@ -40,7 +36,7 @@ fn build_default_rows(port_count: u8, current_port: u8) -> Vec<RawRow> {
     let port = current_port.min(port_count.saturating_sub(1));
     for ch in 0..16u8 {
         rows.push(RawRow::Channel {
-            track_idx: 0,
+            _track_idx: 0,
             port,
             channel: ch,
         });
@@ -59,7 +55,7 @@ fn build_detail_rows(tracks: &[TrackInfoSnapshot]) -> Vec<RawRow> {
         for ch in 0..16u8 {
             if t.channel_note_counts[ch as usize] > 0 {
                 rows.push(RawRow::Channel {
-                    track_idx: t.index,
+                    _track_idx: t.index,
                     port: t.port,
                     channel: ch,
                 });
@@ -80,15 +76,187 @@ pub fn raw_row_count(
 }
 
 pub fn render_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App) {
+    let (cw, ch) = renderer.cell_size();
+    let row_h = ch * ROW_HEIGHT;
+    if area.height < row_h * 2.0 {
+        return;
+    }
+
+    // Header row
+    render_track_header(renderer, area, cw, ch, row_h, app);
+
+    // Content area below header
+    let content = Rect::new(area.x, area.y + row_h, area.width, area.height - row_h);
     match app.track_view_mode {
-        TrackViewMode::Default => render_extended_track_list(renderer, area, app),
-        TrackViewMode::Detail => render_raw_track_list(renderer, area, app),
+        TrackViewMode::Default => render_default_track_list(renderer, content, app),
+        TrackViewMode::Detail => render_detail_track_list(renderer, content, app),
     }
 }
 
-fn render_raw_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App) {
+/// Draw the track list header row with column labels.
+fn render_track_header(
+    renderer: &mut dyn Renderer,
+    area: Rect,
+    cw: f32,
+    ch: f32,
+    row_h: f32,
+    app: &App,
+) {
+    let dim = theme::HEADER_DIM;
+    let y = area.y;
+
+    // // Separator line below header
+    // renderer.draw_hline(area.x, area.x + area.width, y + row_h, theme::BORDER_COLOR, 1.0);
+
+    match app.track_view_mode {
+        TrackViewMode::Default => {
+            // Match column layout of render_default_track_list
+            let params_len = 24;
+            let status_len = 4;
+            let right_cols = params_len + status_len;
+            let name_cols = ((area.width / cw) as usize).saturating_sub(3 + right_cols);
+
+            let label = format!("Ch {:<width$}", "Instrument", width = name_cols);
+            renderer.draw_text(area.x, y, &label, dim, ch);
+
+            let x = area.x + (3 + name_cols) as f32 * cw;
+            let params = " Prg Vol    Pan  Exp  ";
+            renderer.draw_text(x, y, params, dim, ch);
+        }
+        TrackViewMode::Detail => {
+            renderer.draw_text(area.x, y, "  Track / Channel", dim, ch);
+        }
+    }
+}
+
+/// Default mode: 1-line per channel display for left panel.
+///
+/// `01:Piano1         P:00 V:100 C64 E127 PLAY`
+fn render_default_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App) {
     let (cw, ch) = renderer.cell_size();
-    if area.width < cw * 10.0 || area.height < ch {
+    let row_h = ch * ROW_HEIGHT;
+    if area.width < cw * 10.0 || area.height < row_h {
+        return;
+    }
+
+    let cs = &app.shared.channel_states;
+    let muted_mask = app.shared.muted_channels.load(Ordering::Relaxed);
+    let drum_mask = app.shared.drum_channels.load(Ordering::Relaxed);
+    let active_channels = app.used_channels;
+    let current_port = app.current_port;
+    let port_offset = current_port as u64 * 16;
+
+    let visible_rows = (area.height / row_h) as usize;
+
+    // Scroll offset (1 line per channel)
+    let scroll_offset = if app.track_cursor >= visible_rows {
+        app.track_cursor - visible_rows + 1
+    } else {
+        0
+    };
+
+    // Params column starts after name area; status is right-aligned
+    // Layout: "NN:Name         P:xx V:xxx Cxx E:xxx STAT"
+    let params_len = 24; // " P:xx V:xxx Cxx E:xxx "
+    let status_len = 4;  // "PLAY" / "MUTE"
+    let right_cols = params_len + status_len;
+    let name_cols = ((area.width / cw) as usize).saturating_sub(3 + right_cols); // 3 = "NN:"
+
+    for ch_idx in 0..16u8 {
+        let row = ch_idx as usize;
+        if row < scroll_offset || row >= scroll_offset + visible_rows {
+            continue;
+        }
+
+        let screen_row = row - scroll_offset;
+        let y = area.y + screen_row as f32 * row_h;
+        let flat_ch = port_offset + ch_idx as u64;
+        let is_active = active_channels & (1u64 << flat_ch) != 0;
+        let is_muted = muted_mask & (1u64 << flat_ch) != 0;
+        let is_drum = drum_mask & (1u64 << flat_ch) != 0;
+        let is_selected = app.track_cursor == ch_idx as usize;
+
+        let ch_color = if is_muted {
+            theme::MUTED_COLOR
+        } else {
+            theme::channel_color(ch_idx)
+        };
+        let inactive_color = Color::rgb(50, 50, 60);
+
+        if is_selected {
+            renderer.fill_rect(Rect::new(area.x, y, area.width, row_h), theme::SELECTED_BG);
+        }
+
+        if !is_active {
+            let text = format!("{:>2}:---", ch_idx + 1);
+            renderer.draw_text(area.x, y, &text, inactive_color, ch);
+            continue;
+        }
+
+        let ci = flat_ch as usize;
+        let mut x = area.x;
+
+        // Channel number + instrument name
+        let prog = cs.program[ci].load(Ordering::Relaxed);
+        let inst_name = if is_drum {
+            "Drums"
+        } else {
+            gm_instrument_name(prog as u8)
+        };
+        let truncated: String = inst_name.chars().take(name_cols).collect();
+        let label = format!("{:>2}:{:<width$}", ch_idx + 1, truncated, width = name_cols);
+        renderer.draw_text(x, y, &label, ch_color, ch);
+        x += label.len() as f32 * cw;
+
+        // Parameters: P, V, Pan, E
+        let dim = if is_muted { theme::MUTED_COLOR } else { theme::HEADER_FG };
+        let vol = cs.volume[ci].load(Ordering::Relaxed);
+        let pan = cs.pan[ci].load(Ordering::Relaxed);
+        let exp = cs.expression[ci].load(Ordering::Relaxed);
+
+        let pan_str = if pan == 64 {
+            "C64".to_string()
+        } else if pan < 64 {
+            format!("L{:>2}", 64 - pan)
+        } else {
+            format!("R{:>2}", pan - 64)
+        };
+
+        let prg_val = if is_drum {
+            "Dr".to_string()
+        } else {
+            format!("{:>2}", prog)
+        };
+
+        let params = format!(" P:{} V:{:>3} {} E:{:>3} ", prg_val, vol, pan_str, exp);
+        renderer.draw_text(x, y, &params, dim, ch);
+
+        // Status indicator (right-aligned)
+        let vel = cs.velocity[ci].load(Ordering::Relaxed);
+        let status = if is_muted {
+            "MUTE"
+        } else if vel > 0 {
+            "PLAY"
+        } else {
+            "    "
+        };
+        let status_color = if is_muted {
+            Color::rgb(255, 80, 80)
+        } else {
+            Color::rgb(80, 200, 80)
+        };
+        let status_x = area.x + area.width - status_len as f32 * cw;
+        if status_x > x {
+            renderer.draw_text(status_x, y, status, status_color, ch);
+        }
+    }
+}
+
+/// Detail mode: per-track tree with scrolling.
+fn render_detail_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App) {
+    let (cw, ch) = renderer.cell_size();
+    let row_h = ch * ROW_HEIGHT;
+    if area.width < cw * 10.0 || area.height < row_h {
         return;
     }
 
@@ -97,8 +265,7 @@ fn render_raw_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App) {
 
     let rows = build_detail_rows(&tracks);
 
-    // Compute scroll offset
-    let visible_rows = (area.height / ch) as usize;
+    let visible_rows = (area.height / row_h) as usize;
     let scroll_offset = if app.track_cursor >= visible_rows {
         app.track_cursor - visible_rows + 1
     } else {
@@ -106,14 +273,14 @@ fn render_raw_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App) {
     };
 
     let show_port = app.port_count > 1;
+    let max_name_len = ((area.width / cw) as usize).saturating_sub(8);
 
     for (i, row) in rows.iter().enumerate().skip(scroll_offset).take(visible_rows) {
-        let screen_y = area.y + (i - scroll_offset) as f32 * ch;
+        let screen_y = area.y + (i - scroll_offset) as f32 * row_h;
         let is_selected = i == app.track_cursor;
 
-        // Selected row background
         if is_selected {
-            renderer.fill_rect(Rect::new(area.x, screen_y, area.width, ch), theme::SELECTED_BG);
+            renderer.fill_rect(Rect::new(area.x, screen_y, area.width, row_h), theme::SELECTED_BG);
         }
 
         let prefix = if is_selected { "> " } else { "  " };
@@ -122,263 +289,30 @@ fn render_raw_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App) {
             RawRow::TrackHeader { track_idx } => {
                 let t = tracks.iter().find(|t| t.index == *track_idx).unwrap();
                 let name = if t.name.is_empty() {
-                    format!("Track {}", t.index)
+                    format!("Trk {}", t.index)
                 } else {
-                    t.name.clone()
+                    t.name.chars().take(max_name_len).collect()
                 };
                 let port_label = if show_port {
-                    format!("[P{}] ", t.port + 1)
+                    format!("[P{}]", t.port + 1)
                 } else {
                     String::new()
                 };
-                let text = format!("{}{}{:<24}({} notes)", prefix, port_label, name, t.note_count);
+                let text = format!("{}{}{}", prefix, port_label, name);
                 renderer.draw_text_bold(area.x, screen_y, &text, theme::HEADER_FG, ch);
             }
-            RawRow::Channel { port, channel, track_idx } => {
+            RawRow::Channel { port, channel, .. } => {
                 let ch_idx = *channel;
                 let flat_ch = *port as u64 * 16 + ch_idx as u64;
                 let is_muted = muted_mask & (1u64 << flat_ch) != 0;
                 let color = theme::channel_color(ch_idx);
 
-                let t = tracks.iter().find(|t| t.index == *track_idx).unwrap();
-                let note_count = t.channel_note_counts[ch_idx as usize];
-                let instrument = if ch_idx == 9 {
-                    "Drums".to_string()
-                } else {
-                    t.channel_programs[ch_idx as usize]
-                        .map(|p| gm_instrument_name(p).to_string())
-                        .unwrap_or_default()
-                };
-
                 let fg = if is_muted { theme::MUTED_COLOR } else { color };
-                let dim = if is_muted { theme::MUTED_COLOR } else { theme::HEADER_FG };
                 let dot = if is_muted { "\u{25CB}" } else { "\u{25CF}" };
-                let mute_indicator = if is_muted { "M" } else { " " };
 
-                let mut x = area.x;
-                let port_prefix = if show_port {
-                    format!("{}  {} P{}:", prefix, dot, port + 1)
-                } else {
-                    format!("{}  {} ", prefix, dot)
-                };
-                renderer.draw_text(x, screen_y, &port_prefix, fg, ch);
-                x += port_prefix.len() as f32 * cw;
-
-                let ch_text = format!("Ch {:>2}  ", ch_idx + 1);
-                renderer.draw_text(x, screen_y, &ch_text, fg, ch);
-                x += ch_text.len() as f32 * cw;
-
-                let inst_text = format!("{:<24}", instrument);
-                renderer.draw_text(x, screen_y, &inst_text, dim, ch);
-                x += inst_text.len() as f32 * cw;
-
-                let count_text = format!("{:>5} ", note_count);
-                renderer.draw_text(x, screen_y, &count_text, dim, ch);
-                x += count_text.len() as f32 * cw;
-
-                let mute_fg = if is_muted { Color::rgb(255, 80, 80) } else { theme::BORDER_COLOR };
-                renderer.draw_text(x, screen_y, mute_indicator, mute_fg, ch);
+                let text = format!("{}  {} Ch{:>2}", prefix, dot, ch_idx + 1);
+                renderer.draw_text(area.x, screen_y, &text, fg, ch);
             }
-        }
-    }
-}
-
-fn render_extended_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App) {
-    let (cw, ch) = renderer.cell_size();
-    if area.width < cw * 20.0 || area.height < ch * 3.0 {
-        return;
-    }
-
-    let cs = &app.shared.channel_states;
-    let muted_mask = app.shared.muted_channels.load(Ordering::Relaxed);
-    let current_port = app.current_port;
-    let port_offset = current_port as u64 * 16;
-    let active_channels = app.used_channels;
-
-    let label_width = 4.0 * cw;
-    let col_width_px = (area.width - label_width) / 16.0;
-    if col_width_px < cw * 3.0 {
-        return;
-    }
-
-    let label_style_fg = theme::HEADER_FG;
-    let dim_fg = theme::BORDER_COLOR;
-    let inactive_fg = Color::rgb(40, 40, 50);
-
-    let mut y_offset: f32 = 0.0;
-
-    // Port tabs (only if multi-port)
-    if app.port_count > 1 {
-        let tab_y = area.y;
-        let mut x = area.x;
-        for p in 0..app.port_count {
-            let is_current = p == current_port;
-            let label = format!(" P{} ", p + 1);
-            let fg = if is_current { theme::HEADER_FG } else { dim_fg };
-            if is_current {
-                renderer.fill_rect(
-                    Rect::new(x, tab_y, label.len() as f32 * cw, ch),
-                    theme::SELECTED_BG,
-                );
-                renderer.draw_text_bold(x, tab_y, &label, fg, ch);
-            } else {
-                renderer.draw_text(x, tab_y, &label, fg, ch);
-            }
-            x += label.len() as f32 * cw + cw;
-        }
-        y_offset = ch;
-    }
-
-    // Row 0: Channel number header
-    let header_y = area.y + y_offset;
-    renderer.draw_text(area.x, header_y, " Ch", label_style_fg, ch);
-    for ch_idx in 0..16u8 {
-        let x = area.x + label_width + ch_idx as f32 * col_width_px;
-        let flat_ch = port_offset + ch_idx as u64;
-        let is_active = active_channels & (1u64 << flat_ch) != 0;
-        let is_muted = muted_mask & (1u64 << flat_ch) != 0;
-        let fg = if is_muted {
-            theme::MUTED_COLOR
-        } else if is_active {
-            theme::channel_color(ch_idx)
-        } else {
-            inactive_fg
-        };
-        let val = format!("{:>width$}", ch_idx + 1, width = ((col_width_px / cw) as usize).min(4));
-        if is_active && !is_muted {
-            renderer.draw_text_bold(x, header_y, &val, fg, ch);
-        } else {
-            renderer.draw_text(x, header_y, &val, fg, ch);
-        }
-    }
-
-    let drum_mask = app.shared.drum_channels.load(Ordering::Relaxed);
-
-    let param_labels = ["Prg", "Vol", "Pan", "Exp", "Mod", "Bnd", "Ped", "AT", "Bnk", "Rev", "Cho"];
-    let param_fns: &[&dyn Fn(u8, u64) -> String] = &[
-        &|ch_idx: u8, po: u64| {
-            let flat = po + ch_idx as u64;
-            let p = cs.program[flat as usize].load(Ordering::Relaxed);
-            if drum_mask & (1u64 << flat) != 0 {
-                "Dr".to_string()
-            } else {
-                format!("{:>3}", p)
-            }
-        },
-        &|ch_idx: u8, po: u64| {
-            format!("{:>3}", cs.volume[(po + ch_idx as u64) as usize].load(Ordering::Relaxed))
-        },
-        &|ch_idx: u8, po: u64| {
-            let v = cs.pan[(po + ch_idx as u64) as usize].load(Ordering::Relaxed);
-            if v == 64 {
-                " C ".to_string()
-            } else if v < 64 {
-                format!("L{:>2}", 64 - v)
-            } else {
-                format!("R{:>2}", v - 64)
-            }
-        },
-        &|ch_idx: u8, po: u64| {
-            format!("{:>3}", cs.expression[(po + ch_idx as u64) as usize].load(Ordering::Relaxed))
-        },
-        &|ch_idx: u8, po: u64| {
-            format!("{:>3}", cs.modulation[(po + ch_idx as u64) as usize].load(Ordering::Relaxed))
-        },
-        &|ch_idx: u8, po: u64| {
-            let v = cs.pitch_bend[(po + ch_idx as u64) as usize].load(Ordering::Relaxed) as i32 as i16 as i32;
-            if v == 0 {
-                "  0".to_string()
-            } else {
-                format!("{:>+3}", (v * 100 / 8192).clamp(-99, 99))
-            }
-        },
-        &|ch_idx: u8, po: u64| {
-            let v = cs.pedal[(po + ch_idx as u64) as usize].load(Ordering::Relaxed);
-            if v >= 64 { " On".to_string() } else { "Off".to_string() }
-        },
-        &|ch_idx: u8, po: u64| {
-            let v = cs.aftertouch[(po + ch_idx as u64) as usize].load(Ordering::Relaxed);
-            format!("{:>3}", v)
-        },
-        &|ch_idx: u8, po: u64| {
-            format!("{:>3}", cs.bank[(po + ch_idx as u64) as usize].load(Ordering::Relaxed))
-        },
-        &|ch_idx: u8, po: u64| {
-            format!("{:>3}", cs.reverb[(po + ch_idx as u64) as usize].load(Ordering::Relaxed))
-        },
-        &|ch_idx: u8, po: u64| {
-            format!("{:>3}", cs.chorus[(po + ch_idx as u64) as usize].load(Ordering::Relaxed))
-        },
-    ];
-
-    for (row_idx, (label, value_fn)) in param_labels.iter().zip(param_fns.iter()).enumerate() {
-        let y = area.y + y_offset + (1 + row_idx) as f32 * ch;
-        if y + ch > area.y + area.height {
-            break;
-        }
-
-        renderer.draw_text(area.x, y, label, dim_fg, ch);
-
-        for ch_idx in 0..16u8 {
-            let x = area.x + label_width + ch_idx as f32 * col_width_px;
-            let flat_ch = port_offset + ch_idx as u64;
-            let is_active = active_channels & (1u64 << flat_ch) != 0;
-            let is_muted = muted_mask & (1u64 << flat_ch) != 0;
-
-            if !is_active {
-                continue;
-            }
-
-            let val = value_fn(ch_idx, port_offset);
-            let fg = if is_muted { theme::MUTED_COLOR } else { theme::HEADER_FG };
-            let display_w = (col_width_px / cw) as usize;
-            let s = format!("{:>width$}", val, width = display_w.min(4));
-            renderer.draw_text(x, y, &s, fg, ch);
-        }
-    }
-
-    // Separator line
-    let sep_y = area.y + y_offset + (1 + param_labels.len()) as f32 * ch;
-    if sep_y < area.y + area.height {
-        let line_right = (area.x + label_width + 16.0 * col_width_px).min(area.right());
-        renderer.draw_hline(sep_y + ch * 0.5, area.x, line_right, theme::BORDER_COLOR, 1.0);
-    }
-
-    // Activity bars
-    let bar_y_start = sep_y + ch;
-    if bar_y_start < area.y + area.height {
-        let bar_height_px = area.y + area.height - bar_y_start;
-        let bottom = area.y + area.height;
-
-        for ch_idx in 0..16u8 {
-            let x = area.x + label_width + ch_idx as f32 * col_width_px;
-            let flat_ch = port_offset + ch_idx as u64;
-            let is_active = active_channels & (1u64 << flat_ch) != 0;
-            let is_muted = muted_mask & (1u64 << flat_ch) != 0;
-
-            if !is_active {
-                continue;
-            }
-
-            let vel = cs.velocity[flat_ch as usize].load(Ordering::Relaxed);
-            if vel == 0 {
-                continue;
-            }
-
-            let filled_ratio = (vel as f32 / 127.0).clamp(0.0, 1.0);
-            let filled_h = filled_ratio * bar_height_px;
-
-            let color = if is_muted {
-                theme::MUTED_COLOR
-            } else {
-                theme::channel_color(ch_idx)
-            };
-
-            let bar_w = (col_width_px * 0.6).min(cw * 3.0);
-            renderer.fill_rect(
-                Rect::new(x, bottom - filled_h, bar_w, filled_h),
-                color,
-            );
         }
     }
 }

@@ -75,8 +75,12 @@ fn process_player_key(app: &mut App, event: &KeyEvent, modifiers: ModifiersState
             "q" | "Q" => return true,
             "s" | "S" => app.stop(),
             "m" | "M" => app.toggle_mute_selected(),
-            "p" | "P" => app.toggle_piano_roll(),
-            "v" | "V" => app.toggle_piano_roll_orientation(),
+            "p" | "P" => app.toggle_right_panel(),
+            "v" | "V" => {
+                if app.right_panel_mode == crate::app::RightPanelMode::PianoRoll {
+                    app.toggle_piano_roll_orientation();
+                }
+            }
             "e" | "E" => app.toggle_track_view_mode(),
             "+" | "=" => app.volume_up(),
             "-" => app.volume_down(),

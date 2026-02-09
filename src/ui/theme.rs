@@ -28,9 +28,9 @@ pub fn channel_color(channel: u8) -> Color {
 /// Border/header style colors.
 pub const BORDER_COLOR: Color = Color::rgb(80, 80, 100);
 pub const HEADER_FG: Color = Color::rgb(200, 200, 220);
+pub const HEADER_DIM: Color = Color::rgb(120, 120, 140);
 pub const PLAYHEAD_COLOR: Color = Color::rgb(255, 255, 255);
 pub const PROGRESS_FILLED: Color = Color::rgb(100, 180, 255);
 pub const PROGRESS_EMPTY: Color = Color::rgb(50, 50, 70);
 pub const MUTED_COLOR: Color = Color::rgb(80, 80, 80);
 pub const SELECTED_BG: Color = Color::rgb(40, 40, 60);
-pub const TITLE_BAR_BG: Color = Color::rgb(40, 45, 70);

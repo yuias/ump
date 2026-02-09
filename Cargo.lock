@@ -2372,7 +2372,7 @@ checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
 
 [[package]]
 name = "ump"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -2385,6 +2385,7 @@ dependencies = [
  "rustysynth",
  "serde",
  "toml",
+ "unicode-width",
  "wgpu",
  "windows 0.58.0",
  "winit",

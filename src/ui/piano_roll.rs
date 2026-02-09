@@ -6,7 +6,6 @@ use crate::app::App;
 use crate::midi::event::NoteRect;
 use crate::renderer::types::{Color, Rect};
 use crate::renderer::Renderer;
-use crate::ui::layout::TITLE_BAR_HEIGHT;
 use crate::ui::theme;
 
 /// Render the piano roll area using the native renderer.
@@ -21,20 +20,6 @@ pub fn render_piano_roll(
     if area.width < 20.0 || area.height < 10.0 || note_rects.is_empty() {
         return;
     }
-
-    // Clear piano roll background
-    renderer.fill_rect(area, crate::renderer::types::BG_COLOR);
-
-    let (cw, ch) = renderer.cell_size();
-
-    // Title bar (2 cell heights, full width, larger font with padding)
-    let title_h = ch * TITLE_BAR_HEIGHT;
-    let title_bar = Rect::new(area.x, area.y, area.width, title_h);
-    renderer.fill_rect(title_bar, theme::TITLE_BAR_BG);
-    let font_size = ch * 1.02;
-    let text_y = area.y + (title_h - font_size) / 2.0;
-    let mode_label = if vertical { "Piano Roll [V]" } else { "Piano Roll" };
-    renderer.draw_text(area.x + cw, text_y, mode_label, theme::HEADER_FG, font_size);
 
     if vertical {
         render_vertical(renderer, area, app, note_rects);
@@ -51,14 +36,13 @@ fn render_horizontal(
     note_rects: &[NoteRect],
 ) {
     let (cw, ch) = renderer.cell_size();
-    let title_h = ch * TITLE_BAR_HEIGHT;
 
-    // Inner area (below title bar)
+    // Inner area
     let label_width_px = 4.0 * cw;
     let inner_x = area.x + label_width_px;
-    let inner_y = area.y + title_h;
+    let inner_y = area.y;
     let inner_w = area.width - label_width_px;
-    let inner_h = area.height - title_h;
+    let inner_h = area.height;
 
     if inner_w < 10.0 || inner_h < 10.0 {
         return;
@@ -203,14 +187,13 @@ fn render_vertical(
     note_rects: &[NoteRect],
 ) {
     let (cw, ch) = renderer.cell_size();
-    let title_h = ch * TITLE_BAR_HEIGHT;
 
     // Label strip along top (1 row of key names)
     let label_height_px = ch * 1.2;
     let inner_x = area.x;
-    let inner_y = area.y + title_h + label_height_px;
+    let inner_y = area.y + label_height_px;
     let inner_w = area.width;
-    let inner_h = area.height - title_h - label_height_px;
+    let inner_h = area.height - label_height_px;
 
     if inner_w < 10.0 || inner_h < 10.0 {
         return;
@@ -232,7 +215,7 @@ fn render_vertical(
         (key_range / (inner_w / (cw * 3.0))).ceil()
     };
 
-    let label_base_y = area.y + title_h + (label_height_px - label_font_size) / 2.0;
+    let label_base_y = area.y + (label_height_px - label_font_size) / 2.0;
     let mut key = min_key;
     while key <= max_key {
         let offset = (key - min_key) as f32;

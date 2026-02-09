@@ -85,7 +85,7 @@ impl UmpApp {
             Some(app) => {
                 if !app.is_playing() {
                     FRAME_IDLE
-                } else if app.show_piano_roll {
+                } else if app.right_panel_mode == crate::app::RightPanelMode::PianoRoll {
                     FRAME_PIANO_ROLL
                 } else {
                     FRAME_NO_PIANO_ROLL

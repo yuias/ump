@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use anyhow::{Context, Result};
 
@@ -33,6 +34,12 @@ pub enum FocusPanel {
 pub enum TrackViewMode {
     Default,
     Detail,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RightPanelMode {
+    Monitor,
+    PianoRoll,
 }
 
 pub struct App {
@@ -66,9 +73,8 @@ pub struct App {
     pub screen: AppScreen,
     pub focus: FocusPanel,
     pub track_cursor: usize,
-    pub show_piano_roll: bool,
+    pub right_panel_mode: RightPanelMode,
     pub piano_roll_vertical: bool,
-    pub midi_monitor: bool,
     pub show_help: bool,
     pub track_view_mode: TrackViewMode,
     pub zoom_level: f64,
@@ -83,6 +89,10 @@ pub struct App {
     pub midi_file_path: Option<String>,
     pub sf2_file_path: Option<String>,
     pub sample_rate: u32,
+
+    // Scroll state
+    /// Timestamp of last MIDI load (for header scroll animation).
+    pub load_time: Instant,
 
     // Config
     pub config: Config,
@@ -107,9 +117,19 @@ impl App {
         if let Some(vol) = config.audio.volume {
             shared.volume.store(vol.min(100), Ordering::Relaxed);
         }
-        let show_piano_roll = config.display.show_piano_roll.unwrap_or(true);
+        let right_panel_mode = match config.display.right_panel_mode.as_deref() {
+            Some("PianoRoll") => RightPanelMode::PianoRoll,
+            Some("Monitor") => RightPanelMode::Monitor,
+            _ => {
+                // Backward compat: derive from legacy fields
+                if config.display.midi_monitor.unwrap_or(false) {
+                    RightPanelMode::Monitor
+                } else {
+                    RightPanelMode::PianoRoll
+                }
+            }
+        };
         let piano_roll_vertical = config.display.piano_roll_vertical.unwrap_or(false);
-        let midi_monitor = config.display.midi_monitor.unwrap_or(false);
         let track_view_mode = match config.display.track_view_mode.as_deref() {
             Some("Detail") => TrackViewMode::Detail,
             _ => TrackViewMode::Default,
@@ -141,9 +161,8 @@ impl App {
             screen: AppScreen::Player,
             focus: FocusPanel::TrackList,
             track_cursor: 0,
-            show_piano_roll,
+            right_panel_mode,
             piano_roll_vertical,
-            midi_monitor,
             show_help: false,
             track_view_mode,
             zoom_level: 1.0,
@@ -153,6 +172,7 @@ impl App {
             midi_file_path: None,
             sf2_file_path: None,
             sample_rate,
+            load_time: Instant::now(),
             config,
         }
     }
@@ -170,9 +190,18 @@ impl App {
             shared.volume.store(vol.min(100), Ordering::Relaxed);
         }
 
-        let show_piano_roll = config.display.show_piano_roll.unwrap_or(true);
+        let right_panel_mode = match config.display.right_panel_mode.as_deref() {
+            Some("PianoRoll") => RightPanelMode::PianoRoll,
+            Some("Monitor") => RightPanelMode::Monitor,
+            _ => {
+                if config.display.midi_monitor.unwrap_or(false) {
+                    RightPanelMode::Monitor
+                } else {
+                    RightPanelMode::PianoRoll
+                }
+            }
+        };
         let piano_roll_vertical = config.display.piano_roll_vertical.unwrap_or(false);
-        let midi_monitor = config.display.midi_monitor.unwrap_or(false);
         let track_view_mode = match config.display.track_view_mode.as_deref() {
             Some("Detail") => TrackViewMode::Detail,
             _ => TrackViewMode::Default,
@@ -200,9 +229,8 @@ impl App {
             screen: AppScreen::FileBrowser,
             focus: FocusPanel::TrackList,
             track_cursor: 0,
-            show_piano_roll,
+            right_panel_mode,
             piano_roll_vertical,
-            midi_monitor,
             show_help: false,
             track_view_mode,
             zoom_level: 1.0,
@@ -212,6 +240,7 @@ impl App {
             midi_file_path: None,
             sf2_file_path: None,
             sample_rate,
+            load_time: Instant::now(),
             config,
         }
     }
@@ -304,6 +333,7 @@ impl App {
         self.current_port = 0;
         self.midi_mode = detected_mode.to_string();
         self.track_cursor = 0;
+        self.load_time = Instant::now();
         self.midi_file_path = Some(path.to_string());
 
         // Load mode-specific soundfont bundle, or restore default SF2
@@ -537,8 +567,11 @@ impl App {
         // TrackHeader 行では何もしない
     }
 
-    pub fn toggle_piano_roll(&mut self) {
-        self.show_piano_roll = !self.show_piano_roll;
+    pub fn toggle_right_panel(&mut self) {
+        self.right_panel_mode = match self.right_panel_mode {
+            RightPanelMode::Monitor => RightPanelMode::PianoRoll,
+            RightPanelMode::PianoRoll => RightPanelMode::Monitor,
+        };
     }
 
     pub fn toggle_piano_roll_orientation(&mut self) {
@@ -640,7 +673,13 @@ impl App {
     /// Save current state to config (call on exit).
     pub fn save_config(&mut self) {
         self.config.audio.volume = Some(self.volume());
-        self.config.display.show_piano_roll = Some(self.show_piano_roll);
+        self.config.display.right_panel_mode = Some(
+            match self.right_panel_mode {
+                RightPanelMode::Monitor => "Monitor",
+                RightPanelMode::PianoRoll => "PianoRoll",
+            }
+            .to_string(),
+        );
         self.config.display.piano_roll_vertical = Some(self.piano_roll_vertical);
         self.config.display.track_view_mode = Some(
             match self.track_view_mode {

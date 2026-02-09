@@ -254,8 +254,9 @@ impl FileBrowser {
         renderer.draw_text(inner.x + cw, inner.y + ch, &header_text, path_fg, ch);
 
         // File list
+        let row_h = ch * crate::ui::layout::ROW_HEIGHT;
         let list_start_y = inner.y + ch * 3.0;
-        let list_height = ((inner.height - ch * 5.0) / ch) as usize;
+        let list_height = ((inner.height - ch * 5.0) / row_h) as usize;
 
         // Adjust scroll_offset for visible_rows
         if self.cursor >= self.scroll_offset + list_height {
@@ -266,14 +267,14 @@ impl FileBrowser {
         }
 
         for (i, entry) in self.entries.iter().enumerate().skip(self.scroll_offset).take(list_height) {
-            let screen_y = list_start_y + (i - self.scroll_offset) as f32 * ch;
+            let screen_y = list_start_y + (i - self.scroll_offset) as f32 * row_h;
             let is_selected = i == self.cursor;
 
             // Selection background
             if is_selected {
                 let highlight_bg = Color::rgb(50, 50, 80);
                 renderer.fill_rect(
-                    Rect::new(inner.x, screen_y, inner.width, ch),
+                    Rect::new(inner.x, screen_y, inner.width, row_h),
                     highlight_bg,
                 );
             }

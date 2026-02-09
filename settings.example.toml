@@ -41,18 +41,14 @@ size = 14.0
 # height = 720
 
 [display]
-# Show piano roll on startup
-show_piano_roll = true
+# Right panel mode: "PianoRoll" (default) or "Monitor" (tracker-style event monitor)
+right_panel_mode = "PianoRoll"
 
 # Piano roll orientation: false = horizontal (default), true = vertical
 piano_roll_vertical = false
 
-# Track view mode: "Default" (16-channel grid) or "Detail" (per-track tree)
+# Track view mode: "Default" (compact per-channel) or "Detail" (per-track tree)
 track_view_mode = "Default"
-
-# Experimental: show MIDI monitor (tracker-style per-channel note data)
-# in place of the piano roll
-# midi_monitor = true
 
 [debug]
 # Enable verbose debug logging to file
