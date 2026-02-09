@@ -156,8 +156,8 @@ fn render_default_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App)
     };
 
     // Params column starts after name area; status is right-aligned
-    // Layout: "NN:Name         P:xx V:xxx Cxx E:xxx STAT"
-    let params_len = 24; // " P:xx V:xxx Cxx E:xxx "
+    // Layout: "NN:Name        P:xxx V:xxx Cxx E:xxx STAT"
+    let params_len = 25; // " P:xxx V:xxx Cxx E:xxx "
     let status_len = 4;  // "PLAY" / "MUTE"
     let right_cols = params_len + status_len;
     let name_cols = ((area.width / cw) as usize).saturating_sub(3 + right_cols); // 3 = "NN:"
@@ -223,9 +223,9 @@ fn render_default_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App)
         };
 
         let prg_val = if is_drum {
-            "Dr".to_string()
+            " Dr".to_string()
         } else {
-            format!("{:>2}", prog)
+            format!("{:>3}", prog)
         };
 
         let params = format!(" P:{} V:{:>3} {} E:{:>3} ", prg_val, vol, pan_str, exp);
