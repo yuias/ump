@@ -50,21 +50,16 @@ Two rendering backends are available, selected at compile time via Cargo feature
 
 | Feature | Backend | Platform | Default |
 |---|---|---|---|
-| `d2d` | Direct2D / DirectWrite | Windows only | Yes (Windows) |
-| `wgpu-backend` | wgpu + glyphon | Cross-platform | -- |
+| `wgpu-backend` | wgpu + glyphon | Cross-platform (Metal / DX12 / Vulkan) | Yes |
+| `d2d` | Direct2D / DirectWrite | Windows only | -- |
 
 ```sh
-# Windows (D2D, default)
+# Default (wgpu) -- works on macOS, Windows, and Linux
 cargo build --release
 
-# Windows (wgpu)
-cargo build --release --no-default-features --features wgpu-backend
-
-# Linux / macOS (wgpu)
-cargo build --release --no-default-features --features wgpu-backend
+# Windows only (D2D)
+cargo build --release --no-default-features --features d2d
 ```
-
-> **Note:** Cargo does not support platform-conditional default features. On non-Windows platforms, you must explicitly specify `--no-default-features --features wgpu-backend`.
 
 ### Requirements
 
@@ -114,7 +109,7 @@ When a MIDI mode is detected or manually selected, the matching bundle is loaded
 
 ## Limitations
 
-- **Linux/macOS support is experimental** -- The wgpu backend is functional but less tested than the D2D backend on Windows.
+- **D2D backend is Windows-only** -- The D2D (Direct2D) backend requires `--no-default-features --features d2d` and only builds on Windows.
 - **SysEx support is partial** -- GM/GS/XG/GM2 reset, Master Volume, master tune, scale tuning, and GS drum map changes are processed. Other SysEx commands (e.g. GS part parameters, XG effect settings) are parsed but not fully reproduced.
 - **SF2 modulators are partial** -- SF2 Default Modulators (Phase 1) are implemented. Custom per-preset modulators from `pmod`/`imod` chunks are not yet parsed.
 - **No MIDI output** -- Playback is software-synthesized only. External MIDI device output is not supported.
