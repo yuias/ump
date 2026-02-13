@@ -7,7 +7,7 @@ license = "MIT"
 repository = "https://github.com/yuiAs/ump"
 
 [features]
-default = ["d2d"]
+default = ["wgpu-backend"]
 d2d = ["dep:windows"]
 wgpu-backend = ["dep:wgpu", "dep:glyphon", "dep:bytemuck", "dep:pollster"]
 

@@ -1,5 +1,8 @@
 #![windows_subsystem = "windows"]
 
+#[cfg(not(any(feature = "d2d", feature = "wgpu-backend")))]
+compile_error!("Either feature \"d2d\" or \"wgpu-backend\" must be enabled");
+
 #[macro_use]
 mod debug;
 mod app;
