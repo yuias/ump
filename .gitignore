@@ -29,10 +29,10 @@ target
 /assets/*
 
 # Claude Code
-.claude/
+.claude/plans/
+.claude/settings.local.json
 .serena/
-CLAUDE.md
 
-# Debug
+# Development
 docs/dev/*
 !docs/dev/RustySynth-FutureTasks.md
