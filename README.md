@@ -4,8 +4,6 @@ A native GUI MIDI player with SF2 soundfont synthesis.
 
 Built with Rust, using hardware-accelerated rendering (Direct2D or wgpu) and a custom sequencer for low-latency audio playback.
 
-![Screenshot-0.4.0](docs/screenshots/d2d-0.4.0-00.png)
-
 ## Features
 
 - **SF2 Soundfont Synthesis** -- Real-time MIDI rendering via a [rustysynth](https://github.com/sinshu/rustysynth) fork with cubic interpolation, FDN reverb, multi-voice chorus, SVF filter, and SF2 modulator support
