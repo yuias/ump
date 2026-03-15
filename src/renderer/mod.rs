@@ -66,4 +66,9 @@ pub trait Renderer {
 
     /// Get the window/surface size in pixels (width, height).
     fn window_size(&self) -> (u32, u32);
+
+    /// Begin an overlay layer. Subsequent draw calls belong to the overlay,
+    /// which is rendered on top of all previous content (including text).
+    /// Default is a no-op (correct for immediate-mode backends like D2D).
+    fn begin_overlay(&mut self) {}
 }

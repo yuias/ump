@@ -193,10 +193,27 @@ impl GlyphonTextRenderer {
         });
     }
 
+    /// Return the number of queued text entries.
+    pub fn queued_count(&self) -> usize {
+        self.queued.len()
+    }
+
+    #[allow(dead_code)]
     pub fn prepare(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
+    ) -> Result<(), glyphon::PrepareError> {
+        self.prepare_range(device, queue, 0..self.queued.len())
+    }
+
+    /// Prepare only a subset of queued text for rendering.
+    /// Called once per layer to ensure correct z-ordering with rects.
+    pub fn prepare_range(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        range: std::ops::Range<usize>,
     ) -> Result<(), glyphon::PrepareError> {
         self.viewport.update(
             queue,
@@ -210,8 +227,10 @@ impl GlyphonTextRenderer {
         let width = self.width;
         let height = self.height;
 
+        let subset = &self.queued[range];
+
         // Ensure all needed buffers exist in cache (shape only on miss)
-        for q in &self.queued {
+        for q in subset {
             let size_key = (q.size * 10.0) as u32;
             let key = (q.text.clone(), size_key, q.bold);
 
@@ -227,8 +246,7 @@ impl GlyphonTextRenderer {
         }
 
         // Build TextArea list referencing cached buffers
-        let text_areas: Vec<TextArea> = self
-            .queued
+        let text_areas: Vec<TextArea> = subset
             .iter()
             .map(|q| {
                 let size_key = (q.size * 10.0) as u32;

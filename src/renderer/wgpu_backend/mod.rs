@@ -34,6 +34,10 @@ pub struct WgpuRenderer {
     width: u32,
     height: u32,
     clear_color: Color,
+
+    /// Split point for overlay layer (rect index, text index).
+    /// When set, end_frame renders base then overlay in separate passes.
+    overlay_split: Option<(usize, usize)>,
 }
 
 impl WgpuRenderer {
@@ -119,6 +123,7 @@ impl WgpuRenderer {
             width,
             height,
             clear_color: Color::rgb(0, 0, 0),
+            overlay_split: None,
         })
     }
 }
@@ -158,11 +163,6 @@ impl Renderer for WgpuRenderer {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        // Prepare text rendering
-        self.text
-            .prepare(&self.device, &self.queue)
-            .map_err(|e| RenderError::PlatformError(format!("Text prepare error: {}", e)))?;
-
         // Upload rect instances to persistent GPU buffer
         let rect_count = self.rect_instances.len();
         if rect_count > 0 {
@@ -191,9 +191,20 @@ impl Renderer for WgpuRenderer {
                 label: Some("frame_encoder"),
             });
 
+        let overlay = self.overlay_split.take();
+        let (base_rect_end, base_text_end) = overlay
+            .unwrap_or((rect_count, self.text.queued_count()));
+        let total_text = self.text.queued_count();
+
+        // Prepare base layer text
+        self.text
+            .prepare_range(&self.device, &self.queue, 0..base_text_end)
+            .map_err(|e| RenderError::PlatformError(format!("Text prepare error: {}", e)))?;
+
+        // Pass 1: base layer (clear + base rects + base text)
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("main_pass"),
+                label: Some("base_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
@@ -212,8 +223,7 @@ impl Renderer for WgpuRenderer {
                 occlusion_query_set: None,
             });
 
-            // Draw rectangles
-            if rect_count > 0 {
+            if base_rect_end > 0 {
                 render_pass.set_pipeline(&self.rect_pipeline.pipeline);
                 render_pass.set_bind_group(0, &self.rect_pipeline.uniform_bind_group, &[]);
                 render_pass.set_index_buffer(
@@ -221,16 +231,68 @@ impl Renderer for WgpuRenderer {
                     wgpu::IndexFormat::Uint16,
                 );
                 render_pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
-                render_pass.draw_indexed(0..6, 0, 0..rect_count as u32);
+                render_pass.draw_indexed(0..6, 0, 0..base_rect_end as u32);
             }
 
-            // Draw text
             self.text.render(&mut render_pass).map_err(|e| {
                 RenderError::PlatformError(format!("Text render error: {}", e))
             })?;
         }
 
+        // Submit base pass before preparing overlay text.
+        // glyphon's prepare() modifies the shared atlas texture via queue writes;
+        // submitting first ensures the base pass executes with the original atlas.
         self.queue.submit(std::iter::once(encoder.finish()));
+
+        // Pass 2: overlay layer (load + overlay rects + overlay text)
+        if overlay.is_some() && (rect_count > base_rect_end || total_text > base_text_end) {
+            self.text
+                .prepare_range(&self.device, &self.queue, base_text_end..total_text)
+                .map_err(|e| {
+                    RenderError::PlatformError(format!("Overlay text prepare error: {}", e))
+                })?;
+
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("overlay_encoder"),
+                });
+
+            {
+                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("overlay_pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+
+                if rect_count > base_rect_end {
+                    render_pass.set_pipeline(&self.rect_pipeline.pipeline);
+                    render_pass.set_bind_group(0, &self.rect_pipeline.uniform_bind_group, &[]);
+                    render_pass.set_index_buffer(
+                        self.rect_pipeline.index_buffer.slice(..),
+                        wgpu::IndexFormat::Uint16,
+                    );
+                    render_pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
+                    render_pass.draw_indexed(0..6, 0, base_rect_end as u32..rect_count as u32);
+                }
+
+                self.text.render(&mut render_pass).map_err(|e| {
+                    RenderError::PlatformError(format!("Overlay text render error: {}", e))
+                })?;
+            }
+
+            self.queue.submit(std::iter::once(encoder.finish()));
+        }
+
         output.present();
 
         Ok(())
@@ -276,5 +338,9 @@ impl Renderer for WgpuRenderer {
 
     fn window_size(&self) -> (u32, u32) {
         (self.width, self.height)
+    }
+
+    fn begin_overlay(&mut self) {
+        self.overlay_split = Some((self.rect_instances.len(), self.text.queued_count()));
     }
 }

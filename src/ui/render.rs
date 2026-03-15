@@ -98,8 +98,10 @@ fn render_player(renderer: &mut dyn Renderer, app: &mut App) {
     render_transport(renderer, layout.transport, app);
     render_status_bar(renderer, layout.status_bar);
 
-    // Help overlay drawn last (Z-order: on top of everything)
+    // Help overlay: rendered in a separate layer so its background
+    // correctly covers the base layer text (wgpu z-order fix).
     if app.show_help {
+        renderer.begin_overlay();
         render_help(renderer);
     }
 }
