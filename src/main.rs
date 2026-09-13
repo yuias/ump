@@ -111,7 +111,7 @@ impl UmpApp {
             .or_else(|| self.config.resolve_sf2());
         let midi_path = self.args.midi_file.clone();
 
-        if let (Some(ref midi_p), Some(ref sf2_p)) = (&midi_path, &sf2_path) {
+        if let (Some(midi_p), Some(sf2_p)) = (&midi_path, &sf2_path) {
             match self.full_load(midi_p, sf2_p) {
                 Ok(()) => {}
                 Err(e) => {
@@ -386,7 +386,7 @@ impl ApplicationHandler for UmpApp {
             }
 
             WindowEvent::RedrawRequested => {
-                if let (Some(ref mut renderer), Some(ref mut app)) =
+                if let (Some(renderer), Some(app)) =
                     (&mut self.renderer, &mut self.app)
                 {
                     match renderer.begin_frame() {

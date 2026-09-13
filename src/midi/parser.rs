@@ -251,7 +251,7 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
         let primary_channel = channel_counts
             .iter()
             .enumerate()
-            .max_by_key(|(_, &count)| count)
+            .max_by_key(|&(_, &count)| count)
             .and_then(|(ch, &count)| if count > 0 { Some(ch as u8) } else { None });
 
         let program = primary_channel.and_then(|ch| program_by_channel[ch as usize]);

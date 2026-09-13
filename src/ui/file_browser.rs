@@ -327,7 +327,7 @@ fn list_roots() -> Vec<PathBuf> {
 #[cfg(windows)]
 unsafe fn windows_drives_mask() -> u32 {
     #[link(name = "kernel32")]
-    extern "system" {
+    unsafe extern "system" {
         fn GetLogicalDrives() -> u32;
     }
     unsafe { GetLogicalDrives() }
