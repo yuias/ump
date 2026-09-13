@@ -1,14 +1,15 @@
 //! Audio output via cpal.
 
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::Stream;
-
+use ump_playback::sequencer::Sequencer;
 use ump_playback::synth::engine::SynthPool;
-use crate::sequencer::Sequencer;
-use crate::state::SharedState;
+
+use crate::state::{SharedState, SharedStateSink};
 
 pub struct AudioOutput {
     _stream: Stream,
@@ -65,7 +66,7 @@ impl AudioOutput {
                     (sequencer.try_lock(), synth.try_lock())
                 {
                     if let Some(ref mut syn) = *syn_opt {
-                        seq.fill_buffer(syn, &mut left, &mut right, &shared);
+                        render(&mut seq, syn, &mut left, &mut right, &shared);
                     }
                 }
 
@@ -83,5 +84,47 @@ impl AudioOutput {
         stream.play().context("Failed to start audio stream")?;
 
         Ok(AudioOutput { _stream: stream })
+    }
+}
+
+/// Apply transport requests from the UI thread, then render one buffer.
+/// `left`/`right` arrive zeroed and stay silent unless playback is active.
+fn render(
+    seq: &mut Sequencer,
+    synth: &mut SynthPool,
+    left: &mut [f32],
+    right: &mut [f32],
+    shared: &SharedState,
+) {
+    let mut sink = SharedStateSink(shared);
+
+    seq.set_muted_channels(shared.muted_channels.load(Ordering::Relaxed));
+
+    // seek_tick stores target + 1 so that 0 can mean "no request".
+    let seek_raw = shared.seek_tick.swap(0, Ordering::Relaxed);
+    if seek_raw > 0 {
+        seq.seek_to_tick(seek_raw - 1, synth, &mut sink);
+        shared.current_tick.store(seq.current_tick(), Ordering::Relaxed);
+        shared.finished.store(false, Ordering::Relaxed);
+    }
+
+    if shared.stopped.load(Ordering::Relaxed)
+        || !shared.is_playing()
+        || shared.finished.load(Ordering::Relaxed)
+    {
+        return;
+    }
+
+    // Read before rendering so a MasterVolume SysEx takes effect next buffer.
+    let volume = shared.get_volume_f32();
+    seq.fill_buffer(synth, left, right, &mut sink);
+    for s in left.iter_mut().chain(right.iter_mut()) {
+        *s *= volume;
+    }
+
+    shared.current_tick.store(seq.current_tick(), Ordering::Relaxed);
+    if seq.is_finished() {
+        shared.finished.store(true, Ordering::Relaxed);
+        shared.playing.store(false, Ordering::Relaxed);
     }
 }

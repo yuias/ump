@@ -11,7 +11,7 @@ use crate::config::Config;
 use ump_playback::midi::event::{MidiData, NoteRect};
 use ump_playback::midi::parser::parse_midi;
 use ump_playback::midi::tempo_map::TempoMap;
-use crate::sequencer::Sequencer;
+use ump_playback::sequencer::Sequencer;
 use crate::state::{SharedState, TrackInfoSnapshot};
 use crate::synth::audio::AudioOutput;
 use ump_playback::synth::engine::SynthPool;
