@@ -8,15 +8,15 @@ repository = "https://github.com/yuiAs/ump"
 
 [features]
 default = ["wgpu-backend"]
-d2d = ["dep:windows"]
+d2d = ["dep:windows", "dep:windows-numerics"]
 wgpu-backend = ["dep:wgpu", "dep:glyphon", "dep:bytemuck", "dep:pollster"]
 
 [dependencies]
 midly = "0.5"
 rustysynth = { git = "https://github.com/yuiAs/rustysynth", branch = "develop" }
-cpal = "0.15"
+cpal = "0.18"
 winit = "0.30"
-windows = { version = "0.58", optional = true, features = [
+windows = { version = "0.62", optional = true, features = [
     "Foundation_Numerics",
     "Win32_Foundation",
     "Win32_Graphics_Direct2D",
@@ -27,14 +27,15 @@ windows = { version = "0.58", optional = true, features = [
     "Win32_System_Com",
     "Win32_System_SystemInformation",
 ] }
-wgpu = { version = "25", optional = true }
-glyphon = { version = "0.9", optional = true }
+windows-numerics = { version = "0.3", optional = true }
+wgpu = { version = "30", optional = true }
+glyphon = { version = "0.12", optional = true }
 bytemuck = { version = "1", features = ["derive"], optional = true }
-pollster = { version = "0.4", optional = true }
+pollster = { version = "1", optional = true }
 clap = { version = "4", features = ["derive"] }
 anyhow = "1"
-dirs = "5"
-toml = "0.8"
+dirs = "7"
+toml = "1"
 serde = { version = "1", features = ["derive"] }
 unicode-width = "0.2"
 

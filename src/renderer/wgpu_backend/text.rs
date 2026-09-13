@@ -136,9 +136,9 @@ impl GlyphonTextRenderer {
     ) -> (f32, f32) {
         let metrics = Metrics::new(font_size, font_size * 1.2);
         let mut buffer = Buffer::new(font_system, metrics);
-        buffer.set_size(font_system, Some(200.0), Some(200.0));
+        buffer.set_size(Some(200.0), Some(200.0));
         let attrs = Self::make_attrs(false, family);
-        buffer.set_text(font_system, "M", &attrs, Shaping::Advanced);
+        buffer.set_text("M", &attrs, Shaping::Advanced, None);
         buffer.shape_until_scroll(font_system, false);
 
         let mut width = font_size * 0.6;
@@ -237,9 +237,9 @@ impl GlyphonTextRenderer {
             if !self.buffer_cache.contains_key(&key) {
                 let metrics = Metrics::new(q.size, q.size * 1.2);
                 let mut buffer = Buffer::new(&mut self.font_system, metrics);
-                buffer.set_size(&mut self.font_system, Some(10000.0), Some(q.size * 2.0));
+                buffer.set_size(Some(10000.0), Some(q.size * 2.0));
                 let attrs = Self::make_attrs(q.bold, custom_family);
-                buffer.set_text(&mut self.font_system, &q.text, &attrs, Shaping::Advanced);
+                buffer.set_text(&q.text, &attrs, Shaping::Advanced, None);
                 buffer.shape_until_scroll(&mut self.font_system, false);
                 self.buffer_cache.insert(key, buffer);
             }

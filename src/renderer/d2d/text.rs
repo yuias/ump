@@ -127,7 +127,7 @@ impl TextRenderer {
         let text = HSTRING::from("M");
         let layout = unsafe {
             factory
-                .CreateTextLayout(text.as_wide(), format, 1000.0, 1000.0)
+                .CreateTextLayout(&text, format, 1000.0, 1000.0)
                 .map_err(|e| {
                     RenderError::PlatformError(format!("CreateTextLayout failed: {}", e))
                 })?

@@ -23,8 +23,8 @@ pub fn query_sample_rate() -> Result<u32> {
     let default_config = device
         .default_output_config()
         .context("Failed to get default output config")?;
-    let rate = default_config.sample_rate().0;
-    log_info!("Audio device: {:?}, sample_rate={}", device.name().unwrap_or_default(), rate);
+    let rate = default_config.sample_rate();
+    log_info!("Audio device: {:?}, sample_rate={}", device.description().map(|d| d.name().to_owned()).unwrap_or_default(), rate);
     Ok(rate)
 }
 
@@ -44,18 +44,18 @@ impl AudioOutput {
 
         let config = cpal::StreamConfig {
             channels: 2,
-            sample_rate: cpal::SampleRate(sample_rate),
+            sample_rate: sample_rate,
             buffer_size: cpal::BufferSize::Default,
         };
 
         let channels = config.channels as usize;
 
-        let err_fn = |err: cpal::StreamError| {
+        let err_fn = |err: cpal::Error| {
             log_error!("Audio stream error: {}", err);
         };
 
         let stream = device.build_output_stream(
-            &config,
+            config,
             move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                 let sample_count = data.len() / channels;
                 let mut left = vec![0.0f32; sample_count];

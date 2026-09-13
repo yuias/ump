@@ -49,9 +49,9 @@ impl WgpuRenderer {
         font_path: Option<&str>,
         font_size: f32,
     ) -> Result<Self, RenderError> {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
-            ..Default::default()
+            ..wgpu::InstanceDescriptor::new_without_display_handle()
         });
 
         let surface = instance.create_surface(window).map_err(|e| {
@@ -62,6 +62,7 @@ impl WgpuRenderer {
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: Some(&surface),
             force_fallback_adapter: false,
+            ..Default::default()
         }))
         .map_err(|e| RenderError::PlatformError(format!("No suitable GPU adapter found: {}", e)))?;
 
@@ -96,6 +97,7 @@ impl WgpuRenderer {
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
+            color_space: wgpu::SurfaceColorSpace::Auto,
         };
         surface.configure(&device, &surface_config);
 
@@ -151,13 +153,13 @@ impl Renderer for WgpuRenderer {
     }
 
     fn end_frame(&mut self) -> RenderResult<()> {
-        let output = self.surface.get_current_texture().map_err(|e| match e {
-            wgpu::SurfaceError::Lost => RenderError::DeviceLost,
-            wgpu::SurfaceError::OutOfMemory => {
-                RenderError::PlatformError("GPU out of memory".into())
+        let output = match self.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(t) | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
+            wgpu::CurrentSurfaceTexture::Lost => return Err(RenderError::DeviceLost),
+            other => {
+                return Err(RenderError::PlatformError(format!("Surface error: {:?}", other)));
             }
-            other => RenderError::PlatformError(format!("Surface error: {}", other)),
-        })?;
+        };
 
         let view = output
             .texture
@@ -207,6 +209,7 @@ impl Renderer for WgpuRenderer {
                 label: Some("base_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
+                    depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -221,6 +224,7 @@ impl Renderer for WgpuRenderer {
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
 
             if base_rect_end > 0 {
@@ -263,7 +267,8 @@ impl Renderer for WgpuRenderer {
                     label: Some("overlay_pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                         view: &view,
-                        resolve_target: None,
+                        depth_slice: None,
+                    resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Load,
                             store: wgpu::StoreOp::Store,
@@ -272,6 +277,7 @@ impl Renderer for WgpuRenderer {
                     depth_stencil_attachment: None,
                     timestamp_writes: None,
                     occlusion_query_set: None,
+                multiview_mask: None,
                 });
 
                 if rect_count > base_rect_end {
@@ -293,7 +299,7 @@ impl Renderer for WgpuRenderer {
             self.queue.submit(std::iter::once(encoder.finish()));
         }
 
-        output.present();
+        self.queue.present(output);
 
         Ok(())
     }

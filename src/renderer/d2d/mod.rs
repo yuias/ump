@@ -180,8 +180,8 @@ impl Renderer for D2DRenderer {
 
     fn draw_vline(&mut self, x: f32, y_top: f32, y_bottom: f32, color: Color, width: f32) {
         let brush = self.get_brush(color).clone();
-        let p0 = windows::Win32::Graphics::Direct2D::Common::D2D_POINT_2F { x, y: y_top };
-        let p1 = windows::Win32::Graphics::Direct2D::Common::D2D_POINT_2F { x, y: y_bottom };
+        let p0 = windows_numerics::Vector2 { X: x, Y: y_top };
+        let p1 = windows_numerics::Vector2 { X: x, Y: y_bottom };
         unsafe {
             self.render_target.DrawLine(p0, p1, &brush, width, None);
         }
@@ -189,8 +189,8 @@ impl Renderer for D2DRenderer {
 
     fn draw_hline(&mut self, y: f32, x_left: f32, x_right: f32, color: Color, width: f32) {
         let brush = self.get_brush(color).clone();
-        let p0 = windows::Win32::Graphics::Direct2D::Common::D2D_POINT_2F { x: x_left, y };
-        let p1 = windows::Win32::Graphics::Direct2D::Common::D2D_POINT_2F { x: x_right, y };
+        let p0 = windows_numerics::Vector2 { X: x_left, Y: y };
+        let p1 = windows_numerics::Vector2 { X: x_right, Y: y };
         unsafe {
             self.render_target.DrawLine(p0, p1, &brush, width, None);
         }
