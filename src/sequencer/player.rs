@@ -3,11 +3,11 @@
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use crate::midi::event::{MidiData, MidiEvent, TimedMidiEvent};
-use crate::midi::sysex::{parse_sysex, SysExCommand};
-use crate::midi::tempo_map::TempoMap;
+use ump_playback::midi::event::{MidiData, MidiEvent, TimedMidiEvent};
+use ump_playback::midi::sysex::{parse_sysex, SysExCommand};
+use ump_playback::midi::tempo_map::TempoMap;
 use crate::state::SharedState;
-use crate::synth::engine::SynthPool;
+use ump_playback::synth::engine::SynthPool;
 
 #[allow(dead_code)]
 pub struct Sequencer {

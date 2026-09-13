@@ -6,7 +6,7 @@ use crate::app::{App, TrackViewMode};
 use crate::renderer::types::{Color, Rect};
 use crate::renderer::Renderer;
 use crate::state::TrackInfoSnapshot;
-use crate::synth::gm::gm_instrument_name;
+use ump_playback::synth::gm::gm_instrument_name;
 use crate::ui::layout::ROW_HEIGHT;
 use crate::ui::theme;
 

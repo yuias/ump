@@ -294,7 +294,7 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
         port_count,
     };
 
-    log_info!(
+    log::info!(
         "Parse complete: format={}, tracks={}, events={}, notes={}, ticks={}, tpq={}, ports={}",
         format, midi_data.tracks.len(), midi_data.events.len(),
         midi_data.note_rects.len(), total_ticks, ticks_per_quarter, port_count

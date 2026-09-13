@@ -16,7 +16,7 @@ impl SynthEngine {
             SoundFont::new(&mut cursor).context("Failed to load SoundFont")?;
 
         for warn in sound_font.get_warnings() {
-            log_warn!("SF2 sanitize: {}", warn);
+            log::warn!("SF2 sanitize: {}", warn);
         }
 
         let sound_font = Arc::new(sound_font);
@@ -41,7 +41,7 @@ impl SynthEngine {
             SoundFont::new(&mut cursor).context("Failed to load SoundFont")?;
 
         for warn in sound_font.get_warnings() {
-            log_warn!("SF2 sanitize: {}", warn);
+            log::warn!("SF2 sanitize: {}", warn);
         }
 
         Ok(Arc::new(sound_font))

@@ -3,7 +3,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Mutex;
 
-use crate::midi::event::MAX_CHANNELS;
+use ump_playback::midi::event::MAX_CHANNELS;
 
 /// Per-channel MIDI state for Extended track display.
 /// All values updated atomically from the audio thread.

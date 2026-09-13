@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::Stream;
 
-use super::engine::SynthPool;
+use ump_playback::synth::engine::SynthPool;
 use crate::sequencer::Sequencer;
 use crate::state::SharedState;
 

@@ -1,0 +1,15 @@
+[package]
+name = "ump-playback"
+authors = ["yuinshielAs <u5h10n04@s1nc3r34dv1c3.com>"]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/yuiAs/ump"
+description = "MIDI parsing, sequencing, and SoundFont synthesis for ump, without audio I/O or UI"
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+log = { workspace = true }
+midly = { workspace = true }
+rustysynth = { workspace = true }

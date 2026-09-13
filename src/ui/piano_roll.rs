@@ -3,7 +3,7 @@
 //! Uses Renderer trait for native sub-pixel drawing.
 
 use crate::app::App;
-use crate::midi::event::NoteRect;
+use ump_playback::midi::event::NoteRect;
 use crate::renderer::types::{Color, Rect};
 use crate::renderer::Renderer;
 use crate::ui::theme;

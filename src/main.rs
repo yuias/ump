@@ -8,7 +8,6 @@ mod debug;
 mod app;
 mod cli;
 mod config;
-mod midi;
 mod renderer;
 mod sequencer;
 mod state;
@@ -31,7 +30,7 @@ use winit::window::{Window, WindowId};
 use crate::app::{App, AppScreen};
 use crate::cli::Args;
 use crate::config::Config;
-use crate::midi::parser::parse_midi;
+use ump_playback::midi::parser::parse_midi;
 #[cfg(feature = "d2d")]
 use crate::renderer::d2d::D2DRenderer;
 #[cfg(feature = "wgpu-backend")]
@@ -41,7 +40,7 @@ use crate::renderer::Renderer;
 use crate::sequencer::Sequencer;
 use crate::state::{SharedState, TrackInfoSnapshot};
 use crate::synth::audio::{query_sample_rate, AudioOutput};
-use crate::synth::engine::SynthPool;
+use ump_playback::synth::engine::SynthPool;
 use crate::ui::file_browser::{BrowseTarget, FileBrowser};
 use crate::ui::input::{handle_winit_input, InputResult};
 use crate::ui::render::render;
@@ -167,7 +166,7 @@ impl UmpApp {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| sf2_path.to_string());
 
-        let detected_mode = crate::midi::mode_detect::detect_mode(&midi_data.events);
+        let detected_mode = ump_playback::midi::mode_detect::detect_mode(&midi_data.events);
 
         self.config.soundfont.recent_path = Some(config::to_absolute_path(sf2_path));
         self.config.save();

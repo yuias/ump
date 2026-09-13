@@ -2410,16 +2410,26 @@ dependencies = [
  "cpal",
  "dirs",
  "glyphon",
- "midly",
+ "log",
  "pollster",
- "rustysynth",
  "serde",
  "toml",
+ "ump-playback",
  "unicode-width",
  "wgpu",
  "windows",
  "windows-numerics",
  "winit",
+]
+
+[[package]]
+name = "ump-playback"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "log",
+ "midly",
+ "rustysynth",
 ]
 
 [[package]]

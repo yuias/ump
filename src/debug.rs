@@ -54,7 +54,38 @@ pub fn init(verbose: bool) {
         verbose,
     };
 
-    let _ = LOG.set(Mutex::new(writer));
+    if LOG.set(Mutex::new(writer)).is_ok() {
+        // Route `log` records from library crates (ump-playback) into the same file.
+        if log::set_logger(&FileLogger).is_ok() {
+            log::set_max_level(if verbose {
+                log::LevelFilter::Info
+            } else {
+                log::LevelFilter::Warn
+            });
+        }
+    }
+}
+
+struct FileLogger;
+
+impl log::Log for FileLogger {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        metadata.level() <= log::max_level()
+    }
+
+    fn log(&self, record: &log::Record) {
+        if !self.enabled(record.metadata()) {
+            return;
+        }
+        let level = match record.level() {
+            log::Level::Error => "ERROR",
+            log::Level::Warn => "WARN",
+            _ => "INFO",
+        };
+        write_log(level, &record.args().to_string());
+    }
+
+    fn flush(&self) {}
 }
 
 /// Return whether verbose (Info-level) logging is enabled.

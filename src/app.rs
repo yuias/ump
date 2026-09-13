@@ -8,13 +8,13 @@ use std::time::Instant;
 use anyhow::{Context, Result};
 
 use crate::config::Config;
-use crate::midi::event::{MidiData, NoteRect};
-use crate::midi::parser::parse_midi;
-use crate::midi::tempo_map::TempoMap;
+use ump_playback::midi::event::{MidiData, NoteRect};
+use ump_playback::midi::parser::parse_midi;
+use ump_playback::midi::tempo_map::TempoMap;
 use crate::sequencer::Sequencer;
 use crate::state::{SharedState, TrackInfoSnapshot};
 use crate::synth::audio::AudioOutput;
-use crate::synth::engine::SynthPool;
+use ump_playback::synth::engine::SynthPool;
 use crate::ui::file_browser::FileBrowser;
 use crate::ui::track_list::raw_row_count;
 
@@ -258,7 +258,7 @@ impl App {
         );
 
         // Detect mode
-        let detected_mode = crate::midi::mode_detect::detect_mode(&midi_data.events);
+        let detected_mode = ump_playback::midi::mode_detect::detect_mode(&midi_data.events);
 
         let port_count = midi_data.port_count;
 

@@ -6,14 +6,23 @@ edition = "2024"
 license = "MIT"
 repository = "https://github.com/yuiAs/ump"
 
+[workspace]
+members = ["crates/ump-playback"]
+
+[workspace.dependencies]
+anyhow = "1"
+log = "0.4"
+midly = "0.5"
+rustysynth = { git = "https://github.com/yuiAs/rustysynth", branch = "develop" }
+
 [features]
 default = ["wgpu-backend"]
 d2d = ["dep:windows", "dep:windows-numerics"]
 wgpu-backend = ["dep:wgpu", "dep:glyphon", "dep:bytemuck", "dep:pollster"]
 
 [dependencies]
-midly = "0.5"
-rustysynth = { git = "https://github.com/yuiAs/rustysynth", branch = "develop" }
+ump-playback = { path = "crates/ump-playback" }
+log = { workspace = true }
 cpal = "0.18"
 winit = "0.30"
 windows = { version = "0.62", optional = true, features = [
@@ -33,7 +42,7 @@ glyphon = { version = "0.12", optional = true }
 bytemuck = { version = "1", features = ["derive"], optional = true }
 pollster = { version = "1", optional = true }
 clap = { version = "4", features = ["derive"] }
-anyhow = "1"
+anyhow = { workspace = true }
 dirs = "7"
 toml = "1"
 serde = { version = "1", features = ["derive"] }
