@@ -369,6 +369,7 @@ impl Sequencer {
                 }
                 MidiEvent::PitchBend { port, channel, value } => {
                     let flat_ch = *port as usize * 16 + *channel as usize;
+                    synth.pitch_bend(*port, *channel as i32, *value);
                     shared.channel_states.pitch_bend[flat_ch]
                         .store(*value as u32, Ordering::Relaxed);
                 }
