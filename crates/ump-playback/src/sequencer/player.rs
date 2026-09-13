@@ -27,6 +27,14 @@ impl EventSink for () {
     fn on_seek_reset(&mut self) {}
 }
 
+/// Collects events for hosts that forward them elsewhere, such as a log view.
+impl EventSink for Vec<TimedMidiEvent> {
+    fn on_event(&mut self, event: &TimedMidiEvent) {
+        self.push(event.clone());
+    }
+    fn on_seek_reset(&mut self) {}
+}
+
 /// Plays a parsed MIDI file through a [`SynthPool`].
 ///
 /// Holds no transport state: every [`fill_buffer`](Self::fill_buffer) call
