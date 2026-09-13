@@ -29,9 +29,8 @@ target
 /assets/*
 
 # Claude Code
-.claude/plans/
-.claude/settings.local.json
-.serena/
+.claude/
+CLAUDE.local.md
 
 # Development
 docs/dev/*
