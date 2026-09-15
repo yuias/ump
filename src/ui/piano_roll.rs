@@ -236,9 +236,9 @@ fn render_vertical(
 
     // Separator line below labels
     renderer.draw_hline(
+        inner_y,
         inner_x,
         inner_x + inner_w,
-        inner_y,
         theme::BORDER_COLOR,
         1.0,
     );
@@ -325,7 +325,7 @@ fn render_vertical(
     let playhead_y_f = (current_tick as f64 - view_start_tick as f64) * pixels_per_tick;
     let playhead_y = inner_y + playhead_y_f as f32;
     if playhead_y >= inner_y && playhead_y <= inner_y + inner_h {
-        renderer.draw_hline(inner_x, inner_x + inner_w, playhead_y, theme::PLAYHEAD_COLOR, 1.5);
+        renderer.draw_hline(playhead_y, inner_x, inner_x + inner_w,theme::PLAYHEAD_COLOR, 1.5);
     }
 }
 
