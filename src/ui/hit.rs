@@ -52,6 +52,26 @@ pub enum HitAction {
     },
     /// A function-key bar slot.
     FKey(FKeyAction),
+    /// A file browser list row (raw index into `FileBrowser`'s entries).
+    BrowserRow(usize),
+    /// The file browser's whole list area, used for wheel scrolling.
+    BrowserList,
+    /// The file browser's scrollbar track: `track_y`/`track_h` are its pixel
+    /// span, so a click can be resolved to a page up/down without the mouse
+    /// layer needing to query the dialog's geometry directly.
+    BrowserScroll { track_y: f32, track_h: f32 },
+    /// A file browser bottom-bar button.
+    BrowserButton(BrowserButton),
+}
+
+/// File browser bottom-bar button identities.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BrowserButton {
+    Open,
+    Up,
+    Home,
+    Drives,
+    Cancel,
 }
 
 pub struct HitRegion {

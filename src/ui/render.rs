@@ -28,12 +28,30 @@ const SCROLL_GAP: usize = 6;
 
 pub fn render(renderer: &mut dyn Renderer, app: &mut App) {
     match app.screen {
-        AppScreen::Player => render_player(renderer, app),
+        AppScreen::Player => {
+            let mut hits = std::mem::take(&mut app.hit_map);
+            hits.clear();
+            render_player_into(renderer, app, &mut hits);
+
+            // Help overlay: rendered in a separate layer so its background
+            // correctly covers the base layer text (wgpu z-order fix).
+            if app.show_help {
+                renderer.begin_overlay();
+                render_help(renderer);
+            }
+
+            app.hit_map = hits;
+        }
         AppScreen::FileBrowser => render_browser(renderer, app),
     }
 }
 
-fn render_player(renderer: &mut dyn Renderer, app: &mut App) {
+/// Renders the player UI (header, panels, transport, function-key bar) into
+/// `hits`. Shared by the live player screen and, as a read-only backdrop
+/// with a throwaway `HitMap`, by the file browser's dimmed background —
+/// callers own hit-map lifecycle and the help overlay so only one of them
+/// ever calls `begin_overlay` per frame.
+fn render_player_into(renderer: &mut dyn Renderer, app: &mut App, hits: &mut HitMap) {
     app.update_channel_levels();
 
     let (w, h) = renderer.window_size();
@@ -43,14 +61,11 @@ fn render_player(renderer: &mut dyn Renderer, app: &mut App) {
         return;
     }
 
-    let mut hits = std::mem::take(&mut app.hit_map);
-    hits.clear();
-
     let scale = renderer.scale_factor();
     let layout = Layout::compute(w as f32, h as f32, cw, ch, scale);
 
     // Header
-    render_header_native(renderer, layout.header, app, &mut hits);
+    render_header_native(renderer, layout.header, app, hits);
 
     // Left panel: TRACK
     let left_title = match app.track_view_mode {
@@ -59,9 +74,9 @@ fn render_player(renderer: &mut dyn Renderer, app: &mut App) {
     };
     draw_panel(renderer, layout.left_panel, &left_title, layout.title_h);
     if app.port_count > 1 {
-        render_port_tabs(renderer, layout.left_panel, layout.title_h, app, &mut hits);
+        render_port_tabs(renderer, layout.left_panel, layout.title_h, app, hits);
     }
-    render_track_list(renderer, layout.left_content, app, &mut hits);
+    render_track_list(renderer, layout.left_content, app, hits);
 
     // Right panel: Piano Roll
     let right_title = if app.piano_roll_vertical {
@@ -81,21 +96,12 @@ fn render_player(renderer: &mut dyn Renderer, app: &mut App) {
         app,
         &app.note_rects,
         app.piano_roll_vertical,
-        &mut hits,
+        hits,
     );
 
     // Transport and function-key hint bar
-    render_transport(renderer, layout.transport, app, &mut hits);
-    render_fkey_bar(renderer, layout.fkey_bar, app, &mut hits);
-
-    // Help overlay: rendered in a separate layer so its background
-    // correctly covers the base layer text (wgpu z-order fix).
-    if app.show_help {
-        renderer.begin_overlay();
-        render_help(renderer);
-    }
-
-    app.hit_map = hits;
+    render_transport(renderer, layout.transport, app, hits);
+    render_fkey_bar(renderer, layout.fkey_bar, app, hits);
 }
 
 /// Minimum filename width reserved when trimming metadata to fit.
@@ -327,11 +333,27 @@ fn visible_slice(text: &str, offset_cells: usize, max_cells: usize) -> String {
     result
 }
 
+/// Renders the file browser as a modal dialog over a dimmed, non-interactive
+/// snapshot of the player: the player is drawn into a throwaway `HitMap` so
+/// it can't be clicked while the dialog is open, then `begin_overlay` starts
+/// a layer that dims the whole window and draws the dialog on top. Overlay
+/// rects are drawn (in a second wgpu pass, loaded over the first) after the
+/// base layer's text, so the dim correctly covers the player's text too.
 fn render_browser(renderer: &mut dyn Renderer, app: &mut App) {
-    // Only the player screen registers hit regions; keep the map empty here
-    // so stale player-screen regions can't be hit-tested while browsing.
-    app.hit_map.clear();
+    let mut background_hits = HitMap::default();
+    render_player_into(renderer, app, &mut background_hits);
+
+    let can_cancel = app.has_midi() && app.has_sf2();
+    let hover = app.hover;
+
+    renderer.begin_overlay();
+    let (w, h) = renderer.window_size();
+    renderer.fill_dither(Rect::new(0.0, 0.0, w as f32, h as f32), theme::GROUND, None);
+
+    let mut hits = std::mem::take(&mut app.hit_map);
+    hits.clear();
     if let Some(ref mut browser) = app.file_browser {
-        browser.render(renderer);
+        browser.render(renderer, can_cancel, hover.as_ref(), &mut hits);
     }
+    app.hit_map = hits;
 }

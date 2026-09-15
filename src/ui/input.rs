@@ -137,10 +137,7 @@ fn process_browser_key(app: &mut App, event: &KeyEvent, modifiers: ModifiersStat
     if let Key::Named(named) = &event.logical_key {
         match named {
             NamedKey::Escape => {
-                if app.has_midi() && app.has_sf2() {
-                    app.screen = AppScreen::Player;
-                    app.file_browser = None;
-                } else {
+                if !close_browser(app) {
                     return true;
                 }
             }
@@ -173,7 +170,21 @@ fn process_browser_key(app: &mut App, event: &KeyEvent, modifiers: ModifiersStat
     false
 }
 
-fn handle_browser_enter(app: &mut App) {
+/// Close the browser and return to the player screen, if a MIDI and an SF2
+/// are both loaded. Returns `false` when there's nothing to fall back to
+/// (Escape then quits instead; a clickable Cancel button is hidden in that
+/// case, see `FileBrowser::render`'s `can_cancel`).
+pub fn close_browser(app: &mut App) -> bool {
+    if app.has_midi() && app.has_sf2() {
+        app.screen = AppScreen::Player;
+        app.file_browser = None;
+        true
+    } else {
+        false
+    }
+}
+
+pub fn handle_browser_enter(app: &mut App) {
     let result = app
         .file_browser
         .as_mut()
@@ -223,10 +234,7 @@ fn handle_browser_enter(app: &mut App) {
             }
         }
         BrowseResult::Cancel => {
-            if app.has_midi() && app.has_sf2() {
-                app.screen = AppScreen::Player;
-                app.file_browser = None;
-            }
+            close_browser(app);
         }
         BrowseResult::Continue => {}
     }

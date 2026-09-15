@@ -53,23 +53,37 @@ pub fn next_midi_mode(current: &str) -> &'static str {
 }
 
 pub fn render_fkey_bar(renderer: &mut dyn Renderer, area: Rect, app: &App, hits: &mut HitMap) {
+    let play_label = if app.is_playing() && !app.is_finished() { "PAUSE" } else { "PLAY" };
+
+    let items: [(&str, &str, HitAction); 9] = [
+        ("SPC", play_label, HitAction::FKey(FKeyAction::PlayPause)),
+        ("S", "STOP", HitAction::FKey(FKeyAction::Stop)),
+        ("O", "OPEN", HitAction::FKey(FKeyAction::OpenMidi)),
+        ("F", "SF2", HitAction::FKey(FKeyAction::OpenSf2)),
+        ("M", "MUTE", HitAction::FKey(FKeyAction::Mute)),
+        ("E", "DETAIL", HitAction::FKey(FKeyAction::Detail)),
+        ("V", "VERT", HitAction::FKey(FKeyAction::Vert)),
+        ("1-4", "MODE", HitAction::FKey(FKeyAction::Mode)),
+        ("?", "HELP", HitAction::FKey(FKeyAction::Help)),
+    ];
+
+    draw_fkey_items(renderer, area, &items, app.hover, hits);
+}
+
+/// Draws a row of key-hint slots, fkey-bar style: key name in `DIM`, a
+/// label box (`FKEY_BG`/`FKEY_FG`, `ACCENT` when hovered), one hit region
+/// per slot. Shared by the transport function-key bar and the file browser's
+/// button row so both look and behave identically.
+pub(crate) fn draw_fkey_items(
+    renderer: &mut dyn Renderer,
+    area: Rect,
+    items: &[(&str, &str, HitAction)],
+    hover: Option<HitAction>,
+    hits: &mut HitMap,
+) {
     let (cw, ch) = renderer.cell_size();
     let scale = renderer.scale_factor();
     let inset = px(4.0, scale);
-
-    let play_label = if app.is_playing() && !app.is_finished() { "PAUSE" } else { "PLAY" };
-
-    let items: [(&str, &str, FKeyAction); 9] = [
-        ("SPC", play_label, FKeyAction::PlayPause),
-        ("S", "STOP", FKeyAction::Stop),
-        ("O", "OPEN", FKeyAction::OpenMidi),
-        ("F", "SF2", FKeyAction::OpenSf2),
-        ("M", "MUTE", FKeyAction::Mute),
-        ("E", "DETAIL", FKeyAction::Detail),
-        ("V", "VERT", FKeyAction::Vert),
-        ("1-4", "MODE", FKeyAction::Mode),
-        ("?", "HELP", FKeyAction::Help),
-    ];
 
     let key_widths: Vec<f32> = items.iter().map(|(key, _, _)| text_width(key, cw)).collect();
     let longest_label_w = items
@@ -96,7 +110,7 @@ pub fn render_fkey_bar(renderer: &mut dyn Renderer, area: Rect, app: &App, hits:
         let label_w = (slot_x + slot_w - inset - label_x0).max(0.0);
         let label_rect = Rect::new(label_x0, label_y, label_w, label_h);
 
-        let hovered = matches!(app.hover, Some(HitAction::FKey(a)) if a == *action);
+        let hovered = hover == Some(*action);
         renderer.fill_rect(label_rect, if hovered { theme::ACCENT } else { theme::FKEY_BG });
 
         let label_w_px = text_width(label, cw);
@@ -104,7 +118,7 @@ pub fn render_fkey_bar(renderer: &mut dyn Renderer, area: Rect, app: &App, hits:
         let ly = label_rect.y + (label_rect.height - ch) / 2.0;
         renderer.draw_text(lx, ly, label, theme::FKEY_FG, ch);
 
-        hits.push(Rect::new(slot_x, area.y, slot_w, area.height), HitAction::FKey(*action));
+        hits.push(Rect::new(slot_x, area.y, slot_w, area.height), *action);
     }
 }
 

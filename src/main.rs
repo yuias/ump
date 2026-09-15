@@ -79,12 +79,20 @@ impl UmpApp {
     }
 
     /// Redraw immediately after a handled mouse action, mirroring the
-    /// keyboard path's `InputResult::Handled` behavior.
+    /// keyboard path's `InputResult::Handled` behavior (including the
+    /// window title update on returning to the player, e.g. after a
+    /// double-click or OPEN-button file selection).
     fn mark_input_handled(&mut self) {
         if let Some(ref window) = self.window {
             window.request_redraw();
             self.last_draw = Instant::now();
             self.needs_draw = false;
+            if let Some(ref app) = self.app
+                && app.screen == AppScreen::Player
+                && !app.file_name.is_empty()
+            {
+                window.set_title(&format!("ump - {}", app.file_name));
+            }
         }
     }
 
@@ -377,9 +385,7 @@ impl ApplicationHandler for UmpApp {
             WindowEvent::CursorMoved { position, .. } => {
                 self.mouse.set_cursor_pos(position.x as f32, position.y as f32);
                 let mut changed = false;
-                if let Some(ref mut app) = self.app
-                    && app.screen == AppScreen::Player
-                {
+                if let Some(ref mut app) = self.app {
                     if let Some(ref window) = self.window {
                         changed |= self.mouse.update_hover(app, window);
                     }
@@ -405,7 +411,7 @@ impl ApplicationHandler for UmpApp {
                 ..
             } => {
                 let handled = if let Some(ref mut app) = self.app {
-                    app.screen == AppScreen::Player && self.mouse.handle_left_press(app)
+                    self.mouse.handle_left_press(app)
                 } else {
                     false
                 };
@@ -430,8 +436,7 @@ impl ApplicationHandler for UmpApp {
                     .unwrap_or((0.0, 0.0));
                 let shift = self.modifiers.shift_key();
                 let handled = if let Some(ref mut app) = self.app {
-                    app.screen == AppScreen::Player
-                        && self.mouse.handle_wheel(app, delta, row_px, roll_step_px, shift)
+                    self.mouse.handle_wheel(app, delta, row_px, roll_step_px, shift)
                 } else {
                     false
                 };

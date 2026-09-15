@@ -1,5 +1,5 @@
-//! Mouse input for the player screen: hit-testing, click/double-click,
-//! wheel scrolling, and cursor-icon hover feedback.
+//! Mouse input for the player and file-browser screens: hit-testing,
+//! click/double-click, wheel scrolling, and cursor-icon hover feedback.
 //!
 //! Kept separate from `input.rs` (keyboard) because it needs state that
 //! outlives a single event (double-click timing, wheel accumulation).
@@ -12,8 +12,8 @@ use winit::window::{CursorIcon, Window};
 use crate::app::App;
 use crate::ui::file_browser::BrowseTarget;
 use crate::ui::fkey_bar::{next_midi_mode, FKeyAction};
-use crate::ui::hit::HitAction;
-use crate::ui::input::open_browser;
+use crate::ui::hit::{BrowserButton, HitAction};
+use crate::ui::input::{close_browser, handle_browser_enter, open_browser};
 
 /// Max gap between two presses on the same row to count as a double-click.
 const DOUBLE_CLICK_INTERVAL: Duration = Duration::from_millis(400);
@@ -33,7 +33,9 @@ struct SeekDrag {
 /// detection), current cursor position, hover icon, wheel accumulation, and
 /// an in-progress seek-bar drag.
 pub struct MouseState {
-    last_click: Option<(Instant, usize, (f32, f32))>,
+    /// Keyed by the full action so a row index on one screen cannot pair with
+    /// the same index on another screen as a double-click.
+    last_click: Option<(Instant, HitAction, (f32, f32))>,
     cursor: (f32, f32),
     hovering: bool,
     wheel_accum: f32,
@@ -103,7 +105,7 @@ impl MouseState {
         let (x, y) = self.cursor;
         let action = app.hit_map.hit_test(x, y).copied();
         let hovering = action
-            .map(|a| !matches!(a, HitAction::TrackList | HitAction::PianoRoll))
+            .map(|a| !matches!(a, HitAction::TrackList | HitAction::PianoRoll | HitAction::BrowserList))
             .unwrap_or(false);
         if hovering != self.hovering {
             self.hovering = hovering;
@@ -137,6 +139,22 @@ impl MouseState {
         self.drag = None;
     }
 
+    /// Record a press on `action` and report whether it completes a double-click.
+    /// A completed double-click clears the state so a third press starts fresh.
+    fn register_click(&mut self, action: HitAction, x: f32, y: f32) -> bool {
+        let now = Instant::now();
+        let is_double = matches!(
+            self.last_click,
+            Some((t, prev, (lx, ly)))
+                if prev == action
+                    && now.duration_since(t) <= DOUBLE_CLICK_INTERVAL
+                    && (lx - x).abs() <= DOUBLE_CLICK_DIST
+                    && (ly - y).abs() <= DOUBLE_CLICK_DIST
+        );
+        self.last_click = if is_double { None } else { Some((now, action, (x, y))) };
+        is_double
+    }
+
     /// Handle a left-button press at the current cursor position.
     /// Returns `true` if app state changed (redraw needed).
     pub fn handle_left_press(&mut self, app: &mut App) -> bool {
@@ -148,23 +166,9 @@ impl MouseState {
 
         match action {
             HitAction::TrackRow(i) => {
-                let now = Instant::now();
-                let is_double = matches!(
-                    self.last_click,
-                    Some((t, row, (lx, ly)))
-                        if row == i
-                            && now.duration_since(t) <= DOUBLE_CLICK_INTERVAL
-                            && (lx - x).abs() <= DOUBLE_CLICK_DIST
-                            && (ly - y).abs() <= DOUBLE_CLICK_DIST
-                );
-
                 app.select_track_row(i);
-                if is_double {
+                if self.register_click(action, x, y) {
                     app.toggle_solo_row(i);
-                    // Clear so a third press starts a fresh click, not another solo toggle.
-                    self.last_click = None;
-                } else {
-                    self.last_click = Some((now, i, (x, y)));
                 }
                 true
             }
@@ -221,7 +225,46 @@ impl MouseState {
                 }
                 true
             }
-            HitAction::TrackList | HitAction::PianoRoll => false,
+            HitAction::BrowserRow(i) => {
+                if let Some(ref mut b) = app.file_browser {
+                    b.set_cursor(i);
+                }
+                if self.register_click(action, x, y) {
+                    handle_browser_enter(app);
+                }
+                true
+            }
+            HitAction::BrowserScroll { track_y, track_h } => {
+                if let Some(ref mut b) = app.file_browser {
+                    b.scroll_click(y - track_y, track_h);
+                }
+                true
+            }
+            HitAction::BrowserButton(action) => {
+                match action {
+                    BrowserButton::Open => handle_browser_enter(app),
+                    BrowserButton::Up => {
+                        if let Some(ref mut b) = app.file_browser {
+                            b.go_parent();
+                        }
+                    }
+                    BrowserButton::Home => {
+                        if let Some(ref mut b) = app.file_browser {
+                            b.go_home();
+                        }
+                    }
+                    BrowserButton::Drives => {
+                        if let Some(ref mut b) = app.file_browser {
+                            b.go_drives();
+                        }
+                    }
+                    BrowserButton::Cancel => {
+                        close_browser(app);
+                    }
+                }
+                true
+            }
+            HitAction::TrackList | HitAction::PianoRoll | HitAction::BrowserList => false,
         }
     }
 
@@ -255,6 +298,14 @@ impl MouseState {
             .is_some();
         if over_list {
             return self.handle_tracklist_wheel(app, delta, row_px);
+        }
+
+        let over_browser_list = app
+            .hit_map
+            .hit_test_where(x, y, |a| matches!(a, HitAction::BrowserList))
+            .is_some();
+        if over_browser_list {
+            return self.handle_browserlist_wheel(app, delta, row_px);
         }
 
         let over_roll = app
@@ -329,6 +380,50 @@ impl MouseState {
                 }
                 while self.wheel_accum <= -row_px {
                     app.move_cursor_down();
+                    self.wheel_accum += row_px;
+                    moved = true;
+                }
+                moved
+            }
+        }
+    }
+
+    /// Wheel over the file browser's list: moves the cursor a line at a
+    /// time, one `cursor_up`/`cursor_down` step per line or per `row_px` of
+    /// `PixelDelta` (wheel up = up), mirroring `handle_tracklist_wheel`.
+    fn handle_browserlist_wheel(&mut self, app: &mut App, delta: MouseScrollDelta, row_px: f32) -> bool {
+        match delta {
+            MouseScrollDelta::LineDelta(_, dy) => {
+                let n = dy.round() as i32;
+                for _ in 0..n {
+                    if let Some(ref mut b) = app.file_browser {
+                        b.cursor_up();
+                    }
+                }
+                for _ in 0..(-n) {
+                    if let Some(ref mut b) = app.file_browser {
+                        b.cursor_down();
+                    }
+                }
+                n != 0
+            }
+            MouseScrollDelta::PixelDelta(pos) => {
+                if row_px <= 0.0 {
+                    return false;
+                }
+                self.wheel_accum += pos.y as f32;
+                let mut moved = false;
+                while self.wheel_accum >= row_px {
+                    if let Some(ref mut b) = app.file_browser {
+                        b.cursor_up();
+                    }
+                    self.wheel_accum -= row_px;
+                    moved = true;
+                }
+                while self.wheel_accum <= -row_px {
+                    if let Some(ref mut b) = app.file_browser {
+                        b.cursor_down();
+                    }
                     self.wheel_accum += row_px;
                     moved = true;
                 }

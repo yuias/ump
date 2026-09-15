@@ -157,7 +157,9 @@ fn chrono_now() -> String {
     format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", y, mo, d, h, m, sec)
 }
 
-fn days_to_ymd(days: u64) -> (u64, u64, u64) {
+/// Also used by the file browser to format file modification times (UTC,
+/// since no local-time crate is bundled).
+pub(crate) fn days_to_ymd(days: u64) -> (u64, u64, u64) {
     // Simple Gregorian conversion from days since 1970-01-01
     let mut y = 1970;
     let mut rem = days;
