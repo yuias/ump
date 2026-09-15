@@ -69,6 +69,45 @@ ump path/to/file.mid
 ump path/to/file.mid --sf2 path/to/soundfont.sf2
 ```
 
+## Fonts
+
+ump does not bundle any font files. Without a configured or auto-detected font it falls back to the system default sans-serif font.
+
+The recommended dot font is [DotGothic16](https://fonts.google.com/specimen/DotGothic16) (SIL OFL 1.1). Fetch it with:
+
+```sh
+# Windows (PowerShell)
+scripts\fetch-font.ps1
+
+# macOS / Linux
+scripts/fetch-font.sh
+```
+
+Both scripts download the font into ump's font directory and verify it against a pinned commit and checksum.
+
+| Platform | Font directory |
+|---|---|
+| Windows | `%APPDATA%\ump\fonts` |
+| Linux | `~/.config/ump/fonts` |
+| macOS | `~/Library/Application Support/ump/fonts` |
+
+Font resolution order, applied at startup:
+
+1. `font.path` in `settings.toml`, if set.
+2. Otherwise, the first matching font file found (non-recursive) in the font directory above.
+3. Otherwise, the system default font.
+
+Auto-detected fonts default to a 16px size (a multiple of their 16-dot grid renders crisply); set `font.size` in `settings.toml` to override it.
+
+### Closer to PC-98: JF Dot fonts
+
+For a look closer to the original PC-98 dot font, use `jiskan16s-1990` or `Shinonome Gothic 16` from the [JF Dot font page](http://jikasei.me/font/jf-dotfont/) -- both are public-domain variants. These are only distributed as a zip archive, so `fetch-font.ps1`/`fetch-font.sh` cannot install them automatically:
+
+1. Download the archive from the JF Dot font page.
+2. Copy the desired `.ttf` (matching `jiskan16s` or `shinonome`+`16` in the file name) into the font directory above.
+
+Do not use plain `jiskan16` -- its half-width glyphs are Sony-licensed, and ump's auto-detection deliberately excludes it.
+
 ## Configuration
 
 Settings are stored at the platform config directory. See [settings.example.toml](settings.example.toml) for all available options.

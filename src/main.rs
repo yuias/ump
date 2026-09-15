@@ -278,8 +278,7 @@ impl ApplicationHandler for UmpApp {
         };
 
         let size = window.inner_size();
-        let font_path = self.config.font.path.as_deref().map(crate::config::resolve_path);
-        let font_size = self.config.font.size_or_default();
+        let (font_path, font_size) = self.config.resolve_font();
 
         #[cfg(feature = "wgpu-backend")]
         {

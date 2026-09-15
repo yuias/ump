@@ -26,13 +26,17 @@
 volume = 80
 
 [font]
-# Custom font file (.ttf / .otf / .ttc)
-# If not set or loading fails, falls back to the system default sans-serif font
-# (not a fixed-width font — text metrics assume a custom monospace font here).
+# Custom font file (.ttf / .otf / .ttc). Overrides auto-detection below.
+# If not set, ump scans its font directory (see README.md's Fonts section)
+# for a known dot font and uses the first match; if nothing is set or found,
+# it falls back to the system default sans-serif font (not a fixed-width
+# font — text metrics assume a custom monospace font here).
 # path = "C:/Windows/Fonts/msgothic.ttc"
 
 # Font size in logical pixels (scaled by the display's DPI scale factor).
-size = 14.0
+# Default: 14, or 16 when a font was auto-detected (dot fonts render
+# crisply at multiples of their 16-dot grid).
+# size = 14.0
 
 [window]
 # Window position and size in physical pixels (auto-saved on exit)
