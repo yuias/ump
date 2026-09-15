@@ -765,6 +765,12 @@ impl App {
 
     pub fn toggle_help(&mut self) {
         self.show_help = !self.show_help;
+        if self.show_help {
+            // No player hit region is active while help is shown; drop any
+            // stale hover so `transport.rs`/`fkey_bar.rs` don't keep drawing
+            // a highlight for an action that's no longer reachable.
+            self.hover = None;
+        }
     }
 
     pub fn toggle_track_view_mode(&mut self) {
@@ -912,6 +918,15 @@ mod tests {
         let muted = 0b0010; // channel 1 already muted
         // Channel 2 isn't used: soloing it must not touch any mute state.
         assert_eq!(solo_mask(used, muted, 2), muted);
+    }
+
+    #[test]
+    fn toggle_help_clears_stale_hover_when_opening() {
+        let mut app = App::new_empty(44100, Config::default());
+        app.hover = Some(HitAction::PlayPause);
+        app.toggle_help();
+        assert!(app.show_help);
+        assert_eq!(app.hover, None);
     }
 
     #[test]

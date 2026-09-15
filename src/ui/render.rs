@@ -31,13 +31,21 @@ pub fn render(renderer: &mut dyn Renderer, app: &mut App) {
         AppScreen::Player => {
             let mut hits = std::mem::take(&mut app.hit_map);
             hits.clear();
-            render_player_into(renderer, app, &mut hits);
 
-            // Help overlay: rendered in a separate layer so its background
-            // correctly covers the base layer text (wgpu z-order fix).
             if app.show_help {
+                // Render the player into a throwaway HitMap, same as the file
+                // browser's dimmed backdrop: no player hit region is active
+                // while help covers the screen, so a click there closes help
+                // instead of reaching whatever's underneath.
+                let mut background_hits = HitMap::default();
+                render_player_into(renderer, app, &mut background_hits);
+
+                // Help overlay: rendered in a separate layer so its background
+                // correctly covers the base layer text (wgpu z-order fix).
                 renderer.begin_overlay();
                 render_help(renderer);
+            } else {
+                render_player_into(renderer, app, &mut hits);
             }
 
             app.hit_map = hits;

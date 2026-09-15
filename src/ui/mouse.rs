@@ -121,6 +121,12 @@ impl MouseState {
     /// keeps working even if the cursor has left the bar vertically, since
     /// the drag's `x0`/`width` were captured at press time.
     pub fn handle_drag(&mut self, app: &mut App) -> bool {
+        if app.show_help {
+            // The seek bar's hit region is gone while help is shown; drop any
+            // drag that was already in progress so it can't keep seeking.
+            self.drag = None;
+            return false;
+        }
         let Some(drag) = &self.drag else {
             return false;
         };
@@ -158,6 +164,13 @@ impl MouseState {
     /// Handle a left-button press at the current cursor position.
     /// Returns `true` if app state changed (redraw needed).
     pub fn handle_left_press(&mut self, app: &mut App) -> bool {
+        if app.show_help {
+            // No player hit region is active while help is shown; a press
+            // anywhere just dismisses the overlay.
+            app.toggle_help();
+            return true;
+        }
+
         let (x, y) = self.cursor;
         let action = match app.hit_map.hit_test(x, y) {
             Some(a) => *a,
@@ -492,6 +505,29 @@ impl MouseState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Config;
+
+    #[test]
+    fn handle_left_press_closes_help_regardless_of_cursor_position() {
+        let mut app = App::new_empty(44100, Config::default());
+        app.show_help = true;
+        let mut mouse = MouseState::default();
+        mouse.set_cursor_pos(0.0, 0.0); // no hit regions registered at all
+        assert!(mouse.handle_left_press(&mut app));
+        assert!(!app.show_help);
+    }
+
+    #[test]
+    fn handle_drag_under_help_drops_in_progress_drag() {
+        let mut app = App::new_empty(44100, Config::default());
+        app.show_help = true;
+        let mut mouse = MouseState {
+            drag: Some(SeekDrag { x0: 0.0, width: 100.0, total_ticks: 1000, last_tick: 0 }),
+            ..MouseState::default()
+        };
+        assert!(!mouse.handle_drag(&mut app));
+        assert!(mouse.drag.is_none());
+    }
 
     #[test]
     fn ruler_tick_positive_px_per_tick_moves_forward_with_cursor() {
