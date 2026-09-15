@@ -25,11 +25,17 @@ pub struct BarMap {
     segments: Vec<Segment>,
 }
 
+/// Largest denominator exponent this map honors (a 64th-note beat); larger
+/// values from a malformed SMF are clamped here rather than shifted, since
+/// `>> 64` or more panics in debug builds and any exponent beyond this already
+/// collapses the beat to 1 tick.
+const MAX_DENOMINATOR_EXP: u8 = 6;
+
 /// Ticks per beat for a time signature, where `denominator` is the power-of-two
 /// exponent (2 = quarter note beat, 3 = eighth note beat, ...) as used throughout
 /// the codebase (see `App::time_signature`).
 fn beat_ticks(ticks_per_quarter: u64, denominator: u8) -> u64 {
-    ((ticks_per_quarter * 4) >> denominator).max(1)
+    ((ticks_per_quarter * 4) >> denominator.min(MAX_DENOMINATOR_EXP)).max(1)
 }
 
 fn sig_ticks(ticks_per_quarter: u64, numerator: u8, denominator: u8) -> (u64, u64) {
@@ -264,5 +270,23 @@ mod tests {
         let map = BarMap::build(480, &[]);
         let lines: Vec<(u64, bool, u32)> = map.lines_in(100, 1000).collect();
         assert_eq!(lines[0].0, 480);
+    }
+
+    #[test]
+    fn beat_ticks_clamps_huge_denominator_instead_of_panicking() {
+        assert_eq!(beat_ticks(480, 255), beat_ticks(480, MAX_DENOMINATOR_EXP));
+    }
+
+    #[test]
+    fn beat_ticks_unchanged_for_normal_denominators() {
+        assert_eq!(beat_ticks(480, 2), 480); // quarter-note beat
+        assert_eq!(beat_ticks(480, 3), 240); // eighth-note beat
+    }
+
+    #[test]
+    fn build_does_not_panic_on_malformed_denominator() {
+        let events = [ts_event(0, 4, 255)];
+        let map = BarMap::build(480, &events);
+        assert_eq!(map.bar_at(0), (1, 1));
     }
 }
