@@ -6,9 +6,11 @@ use crate::app::{App, AppScreen};
 use crate::renderer::types::Rect;
 use crate::renderer::Renderer;
 use crate::ui::border::draw_panel;
-use crate::ui::header::format_duration;
+use crate::ui::header::{
+    fit_header_items, format_thousands, truncate_sf2_name, HeaderItem, HeaderItemKind,
+};
 use crate::ui::help::render_help;
-use crate::ui::layout::{px, Layout};
+use crate::ui::layout::{dot_size, px, Layout};
 use crate::ui::piano_roll::render_piano_roll;
 use crate::ui::status_bar::render_status_bar;
 use crate::ui::text::{text_cells, text_width};
@@ -16,8 +18,6 @@ use crate::ui::theme;
 use crate::ui::track_list::render_track_list;
 use crate::ui::transport::render_transport;
 
-/// Maximum display width for filename in cell units.
-const MAX_NAME_CELLS: usize = 40;
 /// Pause at start/end of scroll cycle (seconds).
 const SCROLL_PAUSE_SECS: f64 = 3.0;
 /// Scroll speed (cells per second).
@@ -88,76 +88,162 @@ fn render_player(renderer: &mut dyn Renderer, app: &mut App) {
     }
 }
 
-/// Header row: filename (scrolling if long) + metadata, single line.
+/// Minimum filename width reserved when trimming metadata to fit.
+const HEADER_MIN_NAME_CELLS: f32 = 12.0;
+
+/// Header row: PC-98-style bar with an accent logo block, filename (scrolling
+/// if long), and right-aligned metadata that drops items in priority order
+/// when the window is too narrow to show everything.
 fn render_header_native(renderer: &mut dyn Renderer, area: Rect, app: &App) {
     let (cw, ch) = renderer.cell_size();
     let scale = renderer.scale_factor();
-
-    let mut x = area.x + px(4.0, scale);
+    let pad = px(6.0, scale);
     let y = area.y + (area.height - ch) / 2.0;
 
-    // Filename (with marquee scroll for long names)
-    if !app.file_name.is_empty() {
-        let name_width = text_cells(&app.file_name);
+    renderer.fill_rect(area, theme::BAR_BG);
 
-        if name_width <= MAX_NAME_CELLS {
-            renderer.draw_text(x, y, &app.file_name, theme::TEXT, ch);
-            x += name_width as f32 * cw;
-        } else {
-            // Marquee scroll: pause → scroll → loop
-            let elapsed = app.load_time.elapsed().as_secs_f64();
-            let total_scroll = name_width + SCROLL_GAP;
-            let scroll_secs = total_scroll as f64 / SCROLL_SPEED;
-            let cycle = SCROLL_PAUSE_SECS + scroll_secs;
-            let t = elapsed % cycle;
+    // Logo block: accent-filled, "ump" centered inside.
+    let logo_text_w = text_width("ump", cw);
+    let logo_w = logo_text_w + 2.0 * pad;
+    renderer.fill_rect(Rect::new(area.x, area.y, logo_w, area.height), theme::ACCENT);
+    let logo_x = area.x + (logo_w - logo_text_w) / 2.0;
+    renderer.draw_text(logo_x, y, "ump", theme::GROUND, ch);
+    let logo_right = area.x + logo_w;
 
-            let offset = if t < SCROLL_PAUSE_SECS {
-                0
-            } else {
-                ((t - SCROLL_PAUSE_SECS) * SCROLL_SPEED) as usize
-            };
-
-            let gap = " ".repeat(SCROLL_GAP);
-            let looping = format!("{}{}{}", app.file_name, gap, app.file_name);
-            let visible = visible_slice(&looping, offset, MAX_NAME_CELLS - 2);
-            renderer.draw_text(x, y, &visible, theme::TEXT, ch);
-            x += MAX_NAME_CELLS as f32 * cw;
-        }
-    }
-
-    // Metadata fields (all ASCII — text_width is equivalent to .len() here)
-    let bpm = app.current_bpm();
+    // Metadata items, in left-to-right display order.
     let (ts_num, ts_den) = app.time_signature();
-    let sep = " | ";
-
-    let mut fields = vec![
-        format!("BPM: {:.1}", bpm),
-        format!("{}/{}", ts_num, 1 << ts_den),
-        format!("Notes: {}", app.total_notes),
-        format!("Tracks: {}", app.track_count),
-        format!("Duration: {}", format_duration(app.total_duration_secs)),
-        format!("Res: {}", app.ticks_per_quarter),
-        format!("SMF {}", app.format),
-        format!("Mode: {}", app.midi_mode),
+    let mut items = vec![
+        HeaderItem {
+            kind: HeaderItemKind::Smf,
+            text: format!("SMF {}", app.format),
+            color: theme::BAR_FG,
+        },
+        HeaderItem {
+            kind: HeaderItemKind::Tpqn,
+            text: format!("TPQN {}", app.ticks_per_quarter),
+            color: theme::BAR_FG,
+        },
+        HeaderItem {
+            kind: HeaderItemKind::Notes,
+            text: format!("NOTES {}", format_thousands(app.total_notes)),
+            color: theme::BAR_FG,
+        },
+        HeaderItem {
+            kind: HeaderItemKind::Tracks,
+            text: format!("TRACKS {}", app.track_count),
+            color: theme::BAR_FG,
+        },
     ];
-
     if app.port_count > 1 {
-        fields.push(format!("Ports: {}", app.port_count));
+        items.push(HeaderItem {
+            kind: HeaderItemKind::Ports,
+            text: format!("PORTS {}", app.port_count),
+            color: theme::BAR_FG,
+        });
     }
-
-    for field in &fields {
-        renderer.draw_text(x, y, sep, theme::FRAME, ch);
-        x += text_width(sep, cw);
-        renderer.draw_text(x, y, field, theme::TEXT, ch);
-        x += text_width(field, cw);
-    }
-
+    items.push(HeaderItem {
+        kind: HeaderItemKind::TimeSig,
+        text: format!("{}/{}", ts_num, 1 << ts_den),
+        color: theme::BAR_FG,
+    });
+    items.push(HeaderItem {
+        kind: HeaderItemKind::Bpm,
+        text: format!("BPM {:.1}", app.current_bpm()),
+        color: theme::BAR_FG,
+    });
+    items.push(HeaderItem {
+        kind: HeaderItemKind::Mode,
+        text: app.midi_mode.clone(),
+        color: theme::BAR_FG,
+    });
     if !app.sf2_name.is_empty() {
-        renderer.draw_text(x, y, sep, theme::FRAME, ch);
-        x += text_width(sep, cw);
-        let sf2 = format!("SF2: {}", app.sf2_name);
-        renderer.draw_text(x, y, &sf2, theme::FRAME, ch);
+        items.push(HeaderItem {
+            kind: HeaderItemKind::Sf2,
+            text: format!("SF2 {}", truncate_sf2_name(&app.sf2_name)),
+            color: theme::ACCENT,
+        });
     }
+
+    let kinds: Vec<HeaderItemKind> = items.iter().map(|it| it.kind).collect();
+    let widths: Vec<f32> = items.iter().map(|it| text_width(&it.text, cw)).collect();
+    let dot = dot_size(scale);
+    let sep_width = dot + 2.0 * pad;
+
+    let min_name_w = HEADER_MIN_NAME_CELLS * cw;
+    let available = (area.right() - pad - (logo_right + pad + min_name_w)).max(0.0);
+    let kept = fit_header_items(&kinds, &widths, sep_width, available);
+
+    let metadata_w = if kept.is_empty() {
+        0.0
+    } else {
+        kept.iter().map(|&i| widths[i]).sum::<f32>() + sep_width * (kept.len() - 1) as f32
+    };
+    // With no metadata drawn, the filename can extend to the bar's edge
+    // (only one `pad` gap, not one on each side of an empty block).
+    let metadata_start = if kept.is_empty() {
+        area.right()
+    } else {
+        area.right() - pad - metadata_w
+    };
+
+    let mut x = metadata_start;
+    for (n, &i) in kept.iter().enumerate() {
+        if n > 0 {
+            let sep_h = ch * 0.7;
+            let sep_y = area.y + (area.height - sep_h) / 2.0;
+            renderer.fill_rect(Rect::new(x + pad, sep_y, dot, sep_h), theme::FRAME);
+            x += sep_width;
+        }
+        renderer.draw_text(x, y, &items[i].text, items[i].color, ch);
+        x += widths[i];
+    }
+
+    // Filename, scrolling if it doesn't fit the remaining space.
+    let name_x = logo_right + pad;
+    let name_w = (metadata_start - pad - name_x).max(0.0);
+    draw_header_filename(renderer, app, name_x, y, name_w, cw, ch);
+}
+
+/// Draws the header filename, marquee-scrolling it if it doesn't fit `name_w`.
+fn draw_header_filename(
+    renderer: &mut dyn Renderer,
+    app: &App,
+    x: f32,
+    y: f32,
+    name_w: f32,
+    cw: f32,
+    ch: f32,
+) {
+    if app.file_name.is_empty() {
+        renderer.draw_text(x, y, "NO FILE", theme::DIM, ch);
+        return;
+    }
+
+    let name_width = text_cells(&app.file_name);
+    let visible_cells = (name_w / cw).floor() as usize;
+
+    if name_width <= visible_cells {
+        renderer.draw_text(x, y, &app.file_name, theme::BAR_FG, ch);
+        return;
+    }
+
+    // Marquee scroll: pause → scroll → loop.
+    let elapsed = app.load_time.elapsed().as_secs_f64();
+    let total_scroll = name_width + SCROLL_GAP;
+    let scroll_secs = total_scroll as f64 / SCROLL_SPEED;
+    let cycle = SCROLL_PAUSE_SECS + scroll_secs;
+    let t = elapsed % cycle;
+
+    let offset = if t < SCROLL_PAUSE_SECS {
+        0
+    } else {
+        ((t - SCROLL_PAUSE_SECS) * SCROLL_SPEED) as usize
+    };
+
+    let gap = " ".repeat(SCROLL_GAP);
+    let looping = format!("{}{}{}", app.file_name, gap, app.file_name);
+    let visible = visible_slice(&looping, offset, visible_cells);
+    renderer.draw_text(x, y, &visible, theme::BAR_FG, ch);
 }
 
 /// Extract visible substring at a given cell offset with max visible width.

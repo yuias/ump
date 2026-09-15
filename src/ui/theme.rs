@@ -6,10 +6,8 @@ use crate::renderer::Renderer;
 /// Base ground (window background).
 pub const GROUND: Color = Color::rgb(0x00, 0x00, 0x00);
 /// Header bar background.
-#[allow(dead_code)] // not drawn until the component restyle lands
 pub const BAR_BG: Color = Color::rgb(0x22, 0x33, 0xCC);
 /// Header bar foreground.
-#[allow(dead_code)] // not drawn until the component restyle lands
 pub const BAR_FG: Color = Color::rgb(0xFF, 0xFF, 0xFF);
 /// Panel frame line color.
 pub const FRAME: Color = Color::rgb(0x22, 0xCC, 0xCC);
