@@ -31,19 +31,14 @@ pub const WELL: Color = Color::rgb(0x16, 0x16, 0x16);
 #[allow(dead_code)] // no longer drawn since the track list dropped the PLAY/MUTE status column
 pub const OK: Color = Color::rgb(0x22, 0xCC, 0x44);
 /// Piano roll beat gridline color.
-#[allow(dead_code)] // not drawn until the component restyle lands
 pub const BEAT: Color = Color::rgb(0x16, 0x16, 0x3A);
 /// Piano roll measure gridline color.
-#[allow(dead_code)] // not drawn until the component restyle lands
 pub const MEASURE: Color = Color::rgb(0x22, 0x33, 0xCC);
 /// Piano roll black-key row background.
-#[allow(dead_code)] // not drawn until the component restyle lands
 pub const KEY_ROW_BLACK: Color = Color::rgb(0x07, 0x07, 0x18);
 /// Piano key (white key) color.
-#[allow(dead_code)] // not drawn until the component restyle lands
 pub const KEY_WHITE: Color = Color::rgb(0xCC, 0xCC, 0xCC);
 /// Piano key (black key) color.
-#[allow(dead_code)] // not drawn until the component restyle lands
 pub const KEY_BLACK: Color = Color::rgb(0x11, 0x11, 0x11);
 /// Function-key bar background.
 pub const FKEY_BG: Color = Color::rgb(0xEE, 0xEE, 0xEE);

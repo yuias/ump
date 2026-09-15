@@ -31,7 +31,7 @@ use ump_playback::midi::parser::parse_midi;
 #[cfg(feature = "wgpu-backend")]
 use crate::renderer::wgpu_backend::WgpuRenderer;
 use crate::renderer::Renderer;
-use crate::ui::layout::ROW_HEIGHT;
+use crate::ui::layout::{px, ROW_HEIGHT};
 use crate::ui::theme;
 use ump_playback::sequencer::Sequencer;
 use crate::state::{SharedState, TrackInfoSnapshot};
@@ -399,13 +399,15 @@ impl ApplicationHandler for UmpApp {
             }
 
             WindowEvent::MouseWheel { delta, .. } => {
-                let row_px = self
+                let (row_px, roll_step_px) = self
                     .renderer
                     .as_ref()
-                    .map(|r| r.cell_size().1 * ROW_HEIGHT)
-                    .unwrap_or(0.0);
+                    .map(|r| (r.cell_size().1 * ROW_HEIGHT, px(40.0, r.scale_factor())))
+                    .unwrap_or((0.0, 0.0));
+                let shift = self.modifiers.shift_key();
                 let handled = if let Some(ref mut app) = self.app {
-                    app.screen == AppScreen::Player && self.mouse.handle_wheel(app, delta, row_px)
+                    app.screen == AppScreen::Player
+                        && self.mouse.handle_wheel(app, delta, row_px, roll_step_px, shift)
                 } else {
                     false
                 };

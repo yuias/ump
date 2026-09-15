@@ -1,3 +1,4 @@
+pub mod bars;
 pub mod border;
 pub mod file_browser;
 pub mod header;

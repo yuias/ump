@@ -70,6 +70,7 @@ fn render_player(renderer: &mut dyn Renderer, app: &mut App) {
         "PIANO ROLL".to_string()
     };
     draw_panel(renderer, layout.right_panel, &right_title, layout.title_h);
+    render_zoom_label(renderer, layout.right_panel, layout.title_h, app);
 
     render_piano_roll(
         renderer,
@@ -77,6 +78,7 @@ fn render_player(renderer: &mut dyn Renderer, app: &mut App) {
         app,
         &app.note_rects,
         app.piano_roll_vertical,
+        &mut hits,
     );
 
     // Transport and function-key hint bar
@@ -243,6 +245,20 @@ fn render_port_tabs(renderer: &mut dyn Renderer, panel: Rect, title_h: f32, app:
         hits.push(rect, HitAction::PortTab(p));
         x -= pad;
     }
+}
+
+/// Draw the current piano roll zoom level, right-aligned inside a panel's
+/// title strip. `x` is used literally (not `×`, U+00D7) since that glyph is
+/// East Asian Ambiguous width and would misalign in the monospace title row.
+fn render_zoom_label(renderer: &mut dyn Renderer, panel: Rect, title_h: f32, app: &App) {
+    let (cw, ch) = renderer.cell_size();
+    let scale = renderer.scale_factor();
+    let pad = px(8.0, scale);
+    let label = format!("ZOOM x{:.2}", app.zoom_level);
+    let w = text_width(&label, cw);
+    let x = panel.right() - pad - w;
+    let y = panel.y + (title_h - ch) / 2.0;
+    renderer.draw_text(x, y, &label, theme::TITLE_FG, ch);
 }
 
 /// Draws the header filename, marquee-scrolling it if it doesn't fit `name_w`.

@@ -50,12 +50,6 @@ pub trait Renderer {
     /// `bg: None` leaves the off-dots transparent so underlying content shows through.
     fn fill_dither(&mut self, rect: types::Rect, fg: Color, bg: Option<Color>);
 
-    /// Draw a vertical line.
-    fn draw_vline(&mut self, x: f32, y_top: f32, y_bottom: f32, color: Color, width: f32);
-
-    /// Draw a horizontal line.
-    fn draw_hline(&mut self, y: f32, x_left: f32, x_right: f32, color: Color, width: f32);
-
     /// Draw text at a pixel position (for non-grid text, e.g. labels).
     fn draw_text(&mut self, x: f32, y: f32, text: &str, color: Color, size: f32);
 

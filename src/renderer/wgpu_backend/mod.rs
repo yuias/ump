@@ -378,14 +378,6 @@ impl Renderer for WgpuRenderer {
         });
     }
 
-    fn draw_vline(&mut self, x: f32, y_top: f32, y_bottom: f32, color: Color, width: f32) {
-        self.fill_rect(Rect::new(x.floor(), y_top, width, y_bottom - y_top), color);
-    }
-
-    fn draw_hline(&mut self, y: f32, x_left: f32, x_right: f32, color: Color, width: f32) {
-        self.fill_rect(Rect::new(x_left, y.floor(), x_right - x_left, width), color);
-    }
-
     fn draw_text(&mut self, x: f32, y: f32, text: &str, color: Color, size: f32) {
         self.text.queue_text(x, y, text, color, size, false);
     }

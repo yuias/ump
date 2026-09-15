@@ -5,7 +5,8 @@ use crate::renderer::types::Rect;
 
 /// Action bound to a hit region. `usize` is the raw row index as used by
 /// `app.track_cursor` / `build_raw_rows`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// `Ruler` carries f32/f64 geometry, so this can only derive `PartialEq`, not `Eq`.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum HitAction {
     TrackRow(usize),
     TrackMute(usize),
@@ -14,6 +15,18 @@ pub enum HitAction {
     TrackList,
     PortTab(u8),
     OpenMidi,
+    /// The piano roll's note area + keyboard, used for wheel zoom/scroll
+    /// even when the more specific `Ruler` region sits elsewhere in the panel.
+    PianoRoll,
+    /// The piano roll's time ruler: clicking seeks to the tick under the
+    /// cursor. `axis_origin` is the pixel position of `view_start_tick`
+    /// along the ruler's time axis (x for horizontal, y for vertical).
+    Ruler {
+        axis_origin: f32,
+        px_per_tick: f64,
+        view_start_tick: u64,
+        vertical: bool,
+    },
 }
 
 pub struct HitRegion {

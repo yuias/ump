@@ -15,6 +15,7 @@ use ump_playback::sequencer::Sequencer;
 use crate::state::{SharedState, TrackInfoSnapshot};
 use crate::synth::audio::AudioOutput;
 use ump_playback::synth::engine::SynthPool;
+use crate::ui::bars::BarMap;
 use crate::ui::file_browser::FileBrowser;
 use crate::ui::hit::HitMap;
 use crate::ui::track_list::raw_row_count;
@@ -57,6 +58,13 @@ pub struct App {
 
     // Note data for piano roll
     pub note_rects: Vec<NoteRect>,
+    /// Bar/beat map built from the song's time-signature events.
+    pub bar_map: BarMap,
+    /// Piano roll key-range scroll offset (in semitones, relative to the
+    /// centered default), adjusted by `scroll_keys`. Only takes effect when
+    /// the full key range doesn't fit the available space; the render pass
+    /// clamps it to the valid range for the current geometry every frame.
+    pub key_scroll: i32,
     /// Bitfield of channels that have at least one NoteOn event (port*16+ch).
     pub used_channels: u64,
     /// Number of MIDI ports (1-4).
@@ -146,6 +154,8 @@ impl App {
             total_duration_secs,
             midi_mode: "GM".to_string(),
             note_rects: midi_data.note_rects.clone(),
+            bar_map: BarMap::build(midi_data.ticks_per_quarter, &midi_data.events),
+            key_scroll: 0,
             used_channels: midi_data.used_channels,
             port_count,
             current_port: 0,
@@ -205,6 +215,8 @@ impl App {
             total_duration_secs: 0.0,
             midi_mode: String::new(),
             note_rects: Vec::new(),
+            bar_map: BarMap::default(),
+            key_scroll: 0,
             used_channels: 0,
             port_count: 1,
             current_port: 0,
@@ -311,6 +323,8 @@ impl App {
         self.total_ticks = midi_data.total_ticks;
         self.total_duration_secs = tempo_map.total_duration_secs(midi_data.total_ticks);
         self.tempo_map = tempo_map;
+        self.bar_map = BarMap::build(midi_data.ticks_per_quarter, &midi_data.events);
+        self.key_scroll = 0;
         self.note_rects = midi_data.note_rects;
         self.used_channels = midi_data.used_channels;
         self.port_count = port_count;
@@ -515,6 +529,11 @@ impl App {
         self.shared.request_seek(target_tick);
     }
 
+    /// Seek to an absolute tick (e.g. a piano-roll ruler click), clamped to the song's length.
+    pub fn seek_to_tick(&self, tick: u64) {
+        self.shared.request_seek(tick.min(self.total_ticks));
+    }
+
     pub fn volume_up(&self) {
         let v = self.shared.volume.load(Ordering::Relaxed);
         self.shared.volume.store((v + 5).min(100), Ordering::Relaxed);
@@ -614,6 +633,15 @@ impl App {
 
     pub fn zoom_out(&mut self) {
         self.zoom_level = (self.zoom_level / 1.25).max(0.25);
+    }
+
+    /// Adjust the piano roll's key-range scroll offset (positive = toward
+    /// higher pitches). The valid range depends on the current key-range
+    /// geometry, which only the render pass knows, so this just bounds the
+    /// raw offset to more than any real key range (127 semitones) and lets
+    /// `visible_key_range` clamp it precisely every frame.
+    pub fn scroll_keys(&mut self, delta_keys: i32) {
+        self.key_scroll = (self.key_scroll + delta_keys).clamp(-127, 127);
     }
 
     pub fn next_port(&mut self) {
