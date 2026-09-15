@@ -19,12 +19,15 @@ pub enum HitAction {
     /// even when the more specific `Ruler` region sits elsewhere in the panel.
     PianoRoll,
     /// The piano roll's time ruler: clicking seeks to the tick under the
-    /// cursor. `axis_origin` is the pixel position of `view_start_tick`
-    /// along the ruler's time axis (x for horizontal, y for vertical).
+    /// cursor. `axis_origin` is the pixel position of `origin_tick` along the
+    /// ruler's time axis (x for horizontal, y for vertical); `px_per_tick`
+    /// is signed so the same payload shape covers every layout, including a
+    /// vertical piano roll where tick decreases as the axis coordinate
+    /// increases (`Down` flow).
     Ruler {
         axis_origin: f32,
+        origin_tick: f64,
         px_per_tick: f64,
-        view_start_tick: u64,
         vertical: bool,
     },
 }

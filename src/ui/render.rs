@@ -65,7 +65,10 @@ fn render_player(renderer: &mut dyn Renderer, app: &mut App) {
 
     // Right panel: Piano Roll
     let right_title = if app.piano_roll_vertical {
-        "PIANO ROLL [V]".to_string()
+        match app.piano_roll_flow {
+            crate::app::VerticalFlow::Down => "PIANO ROLL [V]".to_string(),
+            crate::app::VerticalFlow::Up => "PIANO ROLL [V UP]".to_string(),
+        }
     } else {
         "PIANO ROLL".to_string()
     };

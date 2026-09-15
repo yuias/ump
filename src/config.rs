@@ -60,6 +60,9 @@ pub struct DisplayConfig {
     pub show_piano_roll: Option<bool>,
     pub track_view_mode: Option<String>,
     pub piano_roll_vertical: Option<bool>,
+    /// Vertical piano roll flow direction: "down" (falling, default) or "up"
+    /// (rising, tracker style). Unknown values fall back to "down".
+    pub piano_roll_flow: Option<String>,
 }
 
 

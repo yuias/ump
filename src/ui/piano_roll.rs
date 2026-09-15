@@ -3,7 +3,7 @@
 //! vertical (step-sequencer style) modes. Uses Renderer trait for native
 //! sub-pixel drawing.
 
-use crate::app::App;
+use crate::app::{App, VerticalFlow};
 use ump_playback::midi::event::NoteRect;
 use crate::renderer::types::Rect;
 use crate::renderer::Renderer;
@@ -299,15 +299,56 @@ fn render_horizontal(
         Rect::new(note_area.x, area.y, note_area.width, ruler_h),
         HitAction::Ruler {
             axis_origin: note_area.x,
+            origin_tick: view_start_tick as f64,
             px_per_tick: pixels_per_tick,
-            view_start_tick,
             vertical: false,
         },
     );
 }
 
-/// Vertical piano roll: keys on X-axis (left=low, right=high), time on Y-axis (flows downward).
-/// Playhead is a horizontal line at 75% from top.
+/// Linear tick <-> y mapping for the vertical piano roll's note area. The
+/// playhead sits at a fixed `playhead_y` regardless of flow; `px_per_tick`
+/// carries the direction as its sign (positive for `Up`, where tick
+/// increases downward as notes rise toward the fixed playhead; negative for
+/// `Down`, where tick increases upward as notes fall toward it).
+struct TimeAxis {
+    playhead_y: f32,
+    current_tick: f64,
+    px_per_tick: f64,
+}
+
+impl TimeAxis {
+    fn new(playhead_y: f32, current_tick: u64, pixels_per_tick: f64, flow: VerticalFlow) -> Self {
+        let px_per_tick = match flow {
+            VerticalFlow::Up => pixels_per_tick,
+            VerticalFlow::Down => -pixels_per_tick,
+        };
+        TimeAxis { playhead_y, current_tick: current_tick as f64, px_per_tick }
+    }
+
+    fn y(&self, tick: u64) -> f32 {
+        self.playhead_y + ((tick as f64 - self.current_tick) * self.px_per_tick) as f32
+    }
+
+    fn tick_at(&self, y: f32) -> f64 {
+        self.current_tick + (y - self.playhead_y) as f64 / self.px_per_tick
+    }
+
+    /// Ticks spanning `[top, bottom]` of the note area, as `(min, max)`
+    /// regardless of which edge is later in time for the current flow.
+    fn visible_range(&self, top: f32, bottom: f32) -> (u64, u64) {
+        let a = self.tick_at(top).max(0.0);
+        let b = self.tick_at(bottom).max(0.0);
+        (a.min(b) as u64, a.max(b) as u64)
+    }
+}
+
+/// Vertical piano roll: keys on X-axis (left=low, right=high), time on the
+/// Y-axis. `app.piano_roll_flow` controls where the keyboard strip sits and
+/// which way notes travel: `Down` (falling, default) has notes fall from
+/// the top onto a keyboard at the bottom; `Up` (tracker style) has notes
+/// rise from below toward a keyboard at the top. In both, the playhead is a
+/// fixed horizontal line 75% of the way down the note area.
 fn render_vertical(
     renderer: &mut dyn Renderer,
     area: Rect,
@@ -318,6 +359,7 @@ fn render_vertical(
     let (cw, ch) = renderer.cell_size();
     let scale = renderer.scale_factor();
     let dot = dot_size(scale);
+    let flow = app.piano_roll_flow;
 
     let kb_h = (2.0 * ch).max(px(28.0, scale));
     let ruler_w = text_width("000", cw) + 2.0 * px(3.0, scale);
@@ -326,8 +368,17 @@ fn render_vertical(
         return;
     }
 
-    let note_area = Rect::new(area.x + ruler_w, area.y + kb_h, area.width - ruler_w, area.height - kb_h);
-    let kb_area = Rect::new(area.x + ruler_w, area.y, area.width - ruler_w, kb_h);
+    // Down: notes on top, keyboard at the bottom. Up: keyboard on top, notes below.
+    let (note_area, kb_area) = match flow {
+        VerticalFlow::Down => (
+            Rect::new(area.x + ruler_w, area.y, area.width - ruler_w, area.height - kb_h),
+            Rect::new(area.x + ruler_w, area.bottom() - kb_h, area.width - ruler_w, kb_h),
+        ),
+        VerticalFlow::Up => (
+            Rect::new(area.x + ruler_w, area.y + kb_h, area.width - ruler_w, area.height - kb_h),
+            Rect::new(area.x + ruler_w, area.y, area.width - ruler_w, kb_h),
+        ),
+    };
     let ruler_area = Rect::new(area.x, area.y, ruler_w, area.height);
 
     // Key range
@@ -342,16 +393,9 @@ fn render_vertical(
     let pixels_per_tick = 0.05 * app.zoom_level * (16.0 * scale) as f64;
 
     let current_tick = app.current_tick();
-
-    // Visible tick range: playhead at 75% from top (notes flow down toward it)
-    let visible_ticks = note_area.height as f64 / pixels_per_tick;
-    let playhead_offset = visible_ticks * 0.75;
-    let view_start_tick = if current_tick as f64 > playhead_offset {
-        (current_tick as f64 - playhead_offset) as u64
-    } else {
-        0
-    };
-    let view_end_tick = view_start_tick + visible_ticks as u64;
+    let playhead_y = note_area.y + note_area.height * 0.75;
+    let axis = TimeAxis::new(playhead_y, current_tick, pixels_per_tick, flow);
+    let (view_start_tick, view_end_tick) = axis.visible_range(note_area.y, note_area.bottom());
 
     // 1. Note area background + black-key columns
     renderer.fill_rect(note_area, theme::GROUND);
@@ -363,10 +407,10 @@ fn render_vertical(
         }
     }
 
-    // 2. Bar/beat grid (horizontal lines, time flows down)
+    // 2. Bar/beat grid (horizontal lines)
     let grid_end = view_end_tick.max(view_start_tick + 1);
     for (tick, is_bar, _) in app.bar_map.lines_in(view_start_tick, grid_end) {
-        let y = note_area.y + ((tick as f64 - view_start_tick as f64) * pixels_per_tick) as f32;
+        let y = axis.y(tick);
         if y < note_area.y || y > note_area.bottom() {
             continue;
         }
@@ -388,7 +432,7 @@ fn render_vertical(
         if !is_bar {
             continue;
         }
-        let y = note_area.y + ((tick as f64 - view_start_tick as f64) * pixels_per_tick) as f32;
+        let y = axis.y(tick);
         if y < note_area.y || y > note_area.bottom() {
             continue;
         }
@@ -397,7 +441,15 @@ fn render_vertical(
             continue;
         }
         let label = format!("{:03}", bar_no);
-        renderer.draw_text(ruler_area.x, y + px(3.0, scale), &label, theme::DIM, ch);
+        // Label sits on the "later" side of its bar line, inside its own bar.
+        // Text isn't clipped to the panel, so clamp into the note area to
+        // avoid bleeding into the title bar (Down) or transport bar (Up)
+        // when a bar line lands near the note area's edge.
+        let label_y = match flow {
+            VerticalFlow::Down => (y - px(3.0, scale) - ch).max(note_area.y),
+            VerticalFlow::Up => (y + px(3.0, scale)).min(note_area.bottom() - ch),
+        };
+        renderer.draw_text(ruler_area.x, label_y, &label, theme::DIM, ch);
     }
 
     // 4. Notes
@@ -433,13 +485,10 @@ fn render_vertical(
         let slot_x = note_area.x + key_offset * slot_w;
         let bar_x = slot_x + (slot_w - bar_w) / 2.0;
 
-        let start_y_f = (note.start_tick as f64 - view_start_tick as f64) * pixels_per_tick;
-        let end_y_f = (note.end_tick as f64 - view_start_tick as f64) * pixels_per_tick;
-
-        let y0 = note_area.y + start_y_f.max(0.0) as f32;
-        let y1 = note_area.y + (end_y_f as f32).min(note_area.height);
-
-        if y0 >= note_area.bottom() || y1 <= note_area.y || y0 >= y1 {
+        let (a, b) = (axis.y(note.start_tick), axis.y(note.end_tick));
+        let y0 = a.min(b).max(note_area.y);
+        let y1 = a.max(b).min(note_area.bottom());
+        if y0 >= y1 {
             continue;
         }
 
@@ -448,7 +497,8 @@ fn render_vertical(
         draw_note(renderer, rect, note.channel, state, dot);
     }
 
-    // 5. Keyboard strip
+    // 5. Keyboard strip. Black keys sit in the 60% nearest the note area;
+    // C labels sit on the edge away from it.
     let label_min_slot = text_width("C-1", cw) + px(2.0, scale);
     for key in lo..=hi {
         let offset = (key - lo) as f32;
@@ -456,7 +506,11 @@ fn render_vertical(
 
         renderer.fill_rect(col, theme::KEY_WHITE);
         if is_black_key(key) {
-            renderer.fill_rect(Rect::new(col.x, col.y, col.width, col.height * 0.6), theme::KEY_BLACK);
+            let black = match flow {
+                VerticalFlow::Down => Rect::new(col.x, col.y, col.width, col.height * 0.6),
+                VerticalFlow::Up => Rect::new(col.x, col.y + col.height * 0.4, col.width, col.height * 0.6),
+            };
+            renderer.fill_rect(black, theme::KEY_BLACK);
         }
         // Octave boundary marker right of B and E (the two single-semitone gaps).
         if matches!(key % 12, 11 | 4) {
@@ -469,14 +523,21 @@ fn render_vertical(
             let label = format!("{}{}", note_str, octave);
             let label_w = text_width(&label, cw) * (font_size / ch);
             let label_x = col.x + (slot_w - label_w) / 2.0;
-            let label_y = kb_area.y + px(2.0, scale);
+            let label_y = match flow {
+                VerticalFlow::Down => kb_area.bottom() - px(2.0, scale) - font_size,
+                VerticalFlow::Up => kb_area.y + px(2.0, scale),
+            };
             renderer.draw_text(label_x, label_y, &label, theme::GROUND, font_size);
         }
     }
-    renderer.fill_rect(Rect::new(note_area.x, note_area.y - dot, note_area.width, dot), theme::FRAME);
+    // FRAME separator on the note-area edge adjacent to the keyboard.
+    let frame_y = match flow {
+        VerticalFlow::Down => note_area.bottom(),
+        VerticalFlow::Up => note_area.y - dot,
+    };
+    renderer.fill_rect(Rect::new(note_area.x, frame_y, note_area.width, dot), theme::FRAME);
 
-    // 6. Playhead + ruler marker
-    let playhead_y = note_area.y + ((current_tick as f64 - view_start_tick as f64) * pixels_per_tick) as f32;
+    // 6. Playhead + ruler marker (points right toward the notes either way)
     if playhead_y >= area.y && playhead_y <= area.bottom() {
         let ph = 2.0 * dot;
         renderer.fill_rect(Rect::new(area.x, playhead_y - ph / 2.0, note_area.right() - area.x, ph), theme::PLAYHEAD);
@@ -498,9 +559,9 @@ fn render_vertical(
     hits.push(
         Rect::new(area.x, note_area.y, ruler_w, note_area.height),
         HitAction::Ruler {
-            axis_origin: note_area.y,
-            px_per_tick: pixels_per_tick,
-            view_start_tick,
+            axis_origin: axis.playhead_y,
+            origin_tick: axis.current_tick,
+            px_per_tick: axis.px_per_tick,
             vertical: true,
         },
     );
@@ -524,6 +585,39 @@ fn is_black_key(key: u8) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn time_axis_current_tick_is_always_at_playhead() {
+        let up = TimeAxis::new(300.0, 10_000, 0.5, VerticalFlow::Up);
+        let down = TimeAxis::new(300.0, 10_000, 0.5, VerticalFlow::Down);
+        assert_eq!(up.y(10_000), 300.0);
+        assert_eq!(down.y(10_000), 300.0);
+    }
+
+    #[test]
+    fn time_axis_later_tick_is_below_playhead_for_up() {
+        let axis = TimeAxis::new(300.0, 10_000, 0.5, VerticalFlow::Up);
+        assert!(axis.y(10_100) > axis.y(10_000));
+    }
+
+    #[test]
+    fn time_axis_later_tick_is_above_playhead_for_down() {
+        let axis = TimeAxis::new(300.0, 10_000, 0.5, VerticalFlow::Down);
+        assert!(axis.y(10_100) < axis.y(10_000));
+    }
+
+    #[test]
+    fn time_axis_visible_range_endpoints_map_to_note_area_edges() {
+        // ppt = 0.5 => top (y=0) is 600 ticks before current, bottom (y=400) is 200 after.
+        let up = TimeAxis::new(300.0, 10_000, 0.5, VerticalFlow::Up);
+        let (lo, hi) = up.visible_range(0.0, 400.0);
+        assert_eq!((lo, hi), (9_400, 10_200));
+
+        // Down flow inverts which edge is the earlier tick.
+        let down = TimeAxis::new(300.0, 10_000, 0.5, VerticalFlow::Down);
+        let (lo, hi) = down.visible_range(0.0, 400.0);
+        assert_eq!((lo, hi), (9_800, 10_600));
+    }
 
     #[test]
     fn visible_key_range_shows_full_range_when_it_fits() {

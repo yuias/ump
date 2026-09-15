@@ -14,6 +14,7 @@ const BINDINGS: &[(&str, &str)] = &[
     ("\u{2191} / \u{2193}", "Cursor Up / Down"),
     ("M", "Mute / Unmute track"),
     ("V", "Toggle piano roll orientation"),
+    ("Shift+V", "Toggle vertical flow (falling / rising)"),
     ("E", "Toggle track view (Default/Detail)"),
     ("+/-", "Volume Up / Down"),
     ("[ / ]", "Zoom Out / In"),

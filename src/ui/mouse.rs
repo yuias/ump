@@ -44,6 +44,15 @@ impl Default for MouseState {
     }
 }
 
+/// Convert a cursor position on a ruler's time axis to a tick, given the
+/// linear mapping recorded when the ruler was rendered, clamped to the
+/// song's length. `px_per_tick` may be negative (a vertical piano roll in
+/// falling/`Down` flow has tick decrease as the axis coordinate increases).
+fn ruler_tick(cursor_axis: f32, axis_origin: f32, origin_tick: f64, px_per_tick: f64, total_ticks: u64) -> u64 {
+    let tick = origin_tick + (cursor_axis - axis_origin) as f64 / px_per_tick;
+    tick.clamp(0.0, total_ticks as f64) as u64
+}
+
 impl MouseState {
     pub fn set_cursor_pos(&mut self, x: f32, y: f32) {
         self.cursor = (x, y);
@@ -108,10 +117,9 @@ impl MouseState {
                 open_browser(app, BrowseTarget::Midi);
                 true
             }
-            HitAction::Ruler { axis_origin, px_per_tick, view_start_tick, vertical } => {
+            HitAction::Ruler { axis_origin, origin_tick, px_per_tick, vertical } => {
                 let cursor_axis = if vertical { y } else { x };
-                let delta_ticks = ((cursor_axis - axis_origin) as f64 / px_per_tick).max(0.0);
-                app.seek_to_tick(view_start_tick + delta_ticks as u64);
+                app.seek_to_tick(ruler_tick(cursor_axis, axis_origin, origin_tick, px_per_tick, app.total_ticks));
                 true
             }
             HitAction::TrackList | HitAction::PianoRoll => false,
@@ -240,5 +248,32 @@ impl MouseState {
                 moved
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ruler_tick_positive_px_per_tick_moves_forward_with_cursor() {
+        // origin at axis=100 => tick=1000; +100px at 0.5 px/tick => +200 ticks.
+        assert_eq!(ruler_tick(200.0, 100.0, 1000.0, 0.5, 100_000), 1200);
+    }
+
+    #[test]
+    fn ruler_tick_negative_px_per_tick_moves_backward_with_cursor() {
+        // Falling vertical flow: moving down (increasing axis) decreases the tick.
+        assert_eq!(ruler_tick(200.0, 100.0, 1000.0, -0.5, 100_000), 800);
+    }
+
+    #[test]
+    fn ruler_tick_clamps_to_zero() {
+        assert_eq!(ruler_tick(0.0, 1000.0, 0.0, 1.0, 100_000), 0);
+    }
+
+    #[test]
+    fn ruler_tick_clamps_to_total_ticks() {
+        assert_eq!(ruler_tick(200_000.0, 0.0, 0.0, 1.0, 100_000), 100_000);
     }
 }

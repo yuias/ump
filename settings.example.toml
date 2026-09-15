@@ -45,6 +45,9 @@ size = 14.0
 # Piano roll orientation: false = horizontal (default), true = vertical
 piano_roll_vertical = false
 
+# Vertical flow: "down" = notes fall onto keyboard at bottom (default), "up" = rise toward keyboard at top
+piano_roll_flow = "down"
+
 # Track view mode: "Default" (compact per-channel) or "Detail" (per-track tree)
 track_view_mode = "Default"
 

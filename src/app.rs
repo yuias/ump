@@ -38,6 +38,35 @@ pub enum TrackViewMode {
     Detail,
 }
 
+/// Direction notes travel through the vertical piano roll. The playhead is
+/// a fixed line 75% of the way down the note area in both cases.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VerticalFlow {
+    /// Notes fall from the top toward a keyboard at the bottom (default).
+    Down,
+    /// Notes rise from the bottom toward a keyboard at the top (tracker style).
+    Up,
+}
+
+impl VerticalFlow {
+    /// Parse the `display.piano_roll_flow` config value. Unknown or missing
+    /// values fall back to `Down`.
+    pub fn from_config(value: Option<&str>) -> Self {
+        match value {
+            Some("up") => VerticalFlow::Up,
+            _ => VerticalFlow::Down,
+        }
+    }
+
+    /// Serialize back to the `display.piano_roll_flow` config value.
+    pub fn as_config_str(&self) -> &'static str {
+        match self {
+            VerticalFlow::Down => "down",
+            VerticalFlow::Up => "up",
+        }
+    }
+}
+
 pub struct App {
     pub shared: Arc<SharedState>,
     pub sequencer: Arc<Mutex<Sequencer>>,
@@ -77,6 +106,7 @@ pub struct App {
     pub focus: FocusPanel,
     pub track_cursor: usize,
     pub piano_roll_vertical: bool,
+    pub piano_roll_flow: VerticalFlow,
     pub show_help: bool,
     pub track_view_mode: TrackViewMode,
     pub zoom_level: f64,
@@ -129,6 +159,7 @@ impl App {
             shared.volume.store(vol.min(100), Ordering::Relaxed);
         }
         let piano_roll_vertical = config.display.piano_roll_vertical.unwrap_or(false);
+        let piano_roll_flow = VerticalFlow::from_config(config.display.piano_roll_flow.as_deref());
         let track_view_mode = match config.display.track_view_mode.as_deref() {
             Some("Detail") => TrackViewMode::Detail,
             _ => TrackViewMode::Default,
@@ -163,6 +194,7 @@ impl App {
             focus: FocusPanel::TrackList,
             track_cursor: 0,
             piano_roll_vertical,
+            piano_roll_flow,
             show_help: false,
             track_view_mode,
             zoom_level: 1.0,
@@ -194,6 +226,7 @@ impl App {
         }
 
         let piano_roll_vertical = config.display.piano_roll_vertical.unwrap_or(false);
+        let piano_roll_flow = VerticalFlow::from_config(config.display.piano_roll_flow.as_deref());
         let track_view_mode = match config.display.track_view_mode.as_deref() {
             Some("Detail") => TrackViewMode::Detail,
             _ => TrackViewMode::Default,
@@ -224,6 +257,7 @@ impl App {
             focus: FocusPanel::TrackList,
             track_cursor: 0,
             piano_roll_vertical,
+            piano_roll_flow,
             show_help: false,
             track_view_mode,
             zoom_level: 1.0,
@@ -627,6 +661,13 @@ impl App {
         self.piano_roll_vertical = !self.piano_roll_vertical;
     }
 
+    pub fn toggle_piano_roll_flow(&mut self) {
+        self.piano_roll_flow = match self.piano_roll_flow {
+            VerticalFlow::Down => VerticalFlow::Up,
+            VerticalFlow::Up => VerticalFlow::Down,
+        };
+    }
+
     pub fn zoom_in(&mut self) {
         self.zoom_level = (self.zoom_level * 1.25).min(8.0);
     }
@@ -741,6 +782,7 @@ impl App {
     pub fn save_config(&mut self) {
         self.config.audio.volume = Some(self.volume());
         self.config.display.piano_roll_vertical = Some(self.piano_roll_vertical);
+        self.config.display.piano_roll_flow = Some(self.piano_roll_flow.as_config_str().to_string());
         self.config.display.track_view_mode = Some(
             match self.track_view_mode {
                 TrackViewMode::Default => "Default",
@@ -870,6 +912,18 @@ mod tests {
         // end_tick is exclusive: tick == end_tick should not count.
         let targets = level_targets(&notes, 5, 100, true);
         assert_eq!(targets[0], 0.0);
+    }
+
+    #[test]
+    fn vertical_flow_from_config_parses_known_values() {
+        assert_eq!(VerticalFlow::from_config(Some("down")), VerticalFlow::Down);
+        assert_eq!(VerticalFlow::from_config(Some("up")), VerticalFlow::Up);
+    }
+
+    #[test]
+    fn vertical_flow_from_config_defaults_to_down() {
+        assert_eq!(VerticalFlow::from_config(None), VerticalFlow::Down);
+        assert_eq!(VerticalFlow::from_config(Some("sideways")), VerticalFlow::Down);
     }
 
     #[test]
