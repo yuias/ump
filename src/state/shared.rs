@@ -190,6 +190,11 @@ impl SharedState {
             .fetch_xor(bit, Ordering::Relaxed);
     }
 
+    /// Replace the mute bitfield wholesale (e.g. solo/unsolo a channel).
+    pub fn set_muted_channels(&self, mask: u64) {
+        self.muted_channels.store(mask, Ordering::Relaxed);
+    }
+
     /// Initialize drum channel bits for all ports.
     pub fn init_drum_channels(&self, port_count: u8) {
         let mut mask = 0u64;

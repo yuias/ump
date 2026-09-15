@@ -28,6 +28,7 @@ pub const SELECTED_BG: Color = Color::rgb(0x22, 0x33, 0xCC);
 /// Recessed well background (e.g. empty progress track).
 pub const WELL: Color = Color::rgb(0x16, 0x16, 0x16);
 /// Positive/playing status color.
+#[allow(dead_code)] // no longer drawn since the track list dropped the PLAY/MUTE status column
 pub const OK: Color = Color::rgb(0x22, 0xCC, 0x44);
 /// Piano roll beat gridline color.
 #[allow(dead_code)] // not drawn until the component restyle lands

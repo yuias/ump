@@ -231,7 +231,7 @@ fn handle_browser_enter(app: &mut App) {
     }
 }
 
-fn open_browser(app: &mut App, target: BrowseTarget) {
+pub fn open_browser(app: &mut App, target: BrowseTarget) {
     let browser = FileBrowser::new(target, app.last_browser_dir.as_deref());
     app.file_browser = Some(browser);
     app.screen = AppScreen::FileBrowser;

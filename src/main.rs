@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use clap::Parser;
 use winit::application::ApplicationHandler;
-use winit::event::{StartCause, WindowEvent};
+use winit::event::{ElementState, MouseButton, StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::ModifiersState;
 use winit::window::{Window, WindowId};
@@ -31,6 +31,7 @@ use ump_playback::midi::parser::parse_midi;
 #[cfg(feature = "wgpu-backend")]
 use crate::renderer::wgpu_backend::WgpuRenderer;
 use crate::renderer::Renderer;
+use crate::ui::layout::ROW_HEIGHT;
 use crate::ui::theme;
 use ump_playback::sequencer::Sequencer;
 use crate::state::{SharedState, TrackInfoSnapshot};
@@ -38,6 +39,7 @@ use crate::synth::audio::{query_sample_rate, AudioOutput};
 use ump_playback::synth::engine::SynthPool;
 use crate::ui::file_browser::{BrowseTarget, FileBrowser};
 use crate::ui::input::{handle_winit_input, InputResult};
+use crate::ui::mouse::MouseState;
 use crate::ui::render::render;
 
 /// Frame intervals by state.
@@ -56,6 +58,7 @@ struct UmpApp {
     needs_draw: bool,
     initialized: bool,
     modifiers: ModifiersState,
+    mouse: MouseState,
 }
 
 impl UmpApp {
@@ -71,6 +74,17 @@ impl UmpApp {
             needs_draw: true,
             initialized: false,
             modifiers: ModifiersState::default(),
+            mouse: MouseState::default(),
+        }
+    }
+
+    /// Redraw immediately after a handled mouse action, mirroring the
+    /// keyboard path's `InputResult::Handled` behavior.
+    fn mark_input_handled(&mut self) {
+        if let Some(ref window) = self.window {
+            window.request_redraw();
+            self.last_draw = Instant::now();
+            self.needs_draw = false;
         }
     }
 
@@ -357,6 +371,46 @@ impl ApplicationHandler for UmpApp {
                         }
                         InputResult::None => {}
                     }
+                }
+            }
+
+            WindowEvent::CursorMoved { position, .. } => {
+                self.mouse.set_cursor_pos(position.x as f32, position.y as f32);
+                if let (Some(app), Some(window)) = (&self.app, &self.window)
+                    && app.screen == AppScreen::Player
+                {
+                    self.mouse.update_hover(app, window);
+                }
+            }
+
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Left,
+                ..
+            } => {
+                let handled = if let Some(ref mut app) = self.app {
+                    app.screen == AppScreen::Player && self.mouse.handle_left_press(app)
+                } else {
+                    false
+                };
+                if handled {
+                    self.mark_input_handled();
+                }
+            }
+
+            WindowEvent::MouseWheel { delta, .. } => {
+                let row_px = self
+                    .renderer
+                    .as_ref()
+                    .map(|r| r.cell_size().1 * ROW_HEIGHT)
+                    .unwrap_or(0.0);
+                let handled = if let Some(ref mut app) = self.app {
+                    app.screen == AppScreen::Player && self.mouse.handle_wheel(app, delta, row_px)
+                } else {
+                    false
+                };
+                if handled {
+                    self.mark_input_handled();
                 }
             }
 

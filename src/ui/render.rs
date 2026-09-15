@@ -10,6 +10,7 @@ use crate::ui::header::{
     fit_header_items, format_thousands, truncate_sf2_name, HeaderItem, HeaderItemKind,
 };
 use crate::ui::help::render_help;
+use crate::ui::hit::{HitAction, HitMap};
 use crate::ui::layout::{dot_size, px, Layout};
 use crate::ui::piano_roll::render_piano_roll;
 use crate::ui::status_bar::render_status_bar;
@@ -33,6 +34,8 @@ pub fn render(renderer: &mut dyn Renderer, app: &mut App) {
 }
 
 fn render_player(renderer: &mut dyn Renderer, app: &mut App) {
+    app.update_channel_levels();
+
     let (w, h) = renderer.window_size();
     let (cw, ch) = renderer.cell_size();
 
@@ -40,25 +43,25 @@ fn render_player(renderer: &mut dyn Renderer, app: &mut App) {
         return;
     }
 
+    let mut hits = std::mem::take(&mut app.hit_map);
+    hits.clear();
+
     let scale = renderer.scale_factor();
     let layout = Layout::compute(w as f32, h as f32, cw, ch, scale);
 
     // Header
-    render_header_native(renderer, layout.header, app);
+    render_header_native(renderer, layout.header, app, &mut hits);
 
     // Left panel: TRACK
     let left_title = match app.track_view_mode {
-        crate::app::TrackViewMode::Default => {
-            if app.port_count > 1 {
-                format!("TRACK [P{}]", app.current_port + 1)
-            } else {
-                "TRACK".to_string()
-            }
-        }
+        crate::app::TrackViewMode::Default => "TRACK".to_string(),
         crate::app::TrackViewMode::Detail => "TRACK [Detail]".to_string(),
     };
     draw_panel(renderer, layout.left_panel, &left_title, layout.title_h);
-    render_track_list(renderer, layout.left_content, app);
+    if app.port_count > 1 {
+        render_port_tabs(renderer, layout.left_panel, layout.title_h, app, &mut hits);
+    }
+    render_track_list(renderer, layout.left_content, app, &mut hits);
 
     // Right panel: Piano Roll
     let right_title = if app.piano_roll_vertical {
@@ -86,6 +89,8 @@ fn render_player(renderer: &mut dyn Renderer, app: &mut App) {
         renderer.begin_overlay();
         render_help(renderer);
     }
+
+    app.hit_map = hits;
 }
 
 /// Minimum filename width reserved when trimming metadata to fit.
@@ -94,7 +99,7 @@ const HEADER_MIN_NAME_CELLS: f32 = 12.0;
 /// Header row: PC-98-style bar with an accent logo block, filename (scrolling
 /// if long), and right-aligned metadata that drops items in priority order
 /// when the window is too narrow to show everything.
-fn render_header_native(renderer: &mut dyn Renderer, area: Rect, app: &App) {
+fn render_header_native(renderer: &mut dyn Renderer, area: Rect, app: &App, hits: &mut HitMap) {
     let (cw, ch) = renderer.cell_size();
     let scale = renderer.scale_factor();
     let pad = px(6.0, scale);
@@ -201,7 +206,43 @@ fn render_header_native(renderer: &mut dyn Renderer, area: Rect, app: &App) {
     // Filename, scrolling if it doesn't fit the remaining space.
     let name_x = logo_right + pad;
     let name_w = (metadata_start - pad - name_x).max(0.0);
+    hits.push(Rect::new(name_x, area.y, name_w, area.height), HitAction::OpenMidi);
     draw_header_filename(renderer, app, name_x, y, name_w, cw, ch);
+}
+
+/// Draw right-aligned port tabs ("P1 P2 ...") inside a panel's title strip.
+fn render_port_tabs(renderer: &mut dyn Renderer, panel: Rect, title_h: f32, app: &App, hits: &mut HitMap) {
+    let (cw, ch) = renderer.cell_size();
+    let scale = renderer.scale_factor();
+    let pad = px(4.0, scale);
+    let dot = dot_size(scale);
+    let tab_h = title_h - 2.0 * px(2.0, scale);
+    let tab_w = text_width("P9", cw) + 2.0 * pad;
+
+    let tab_y = panel.y + (title_h - tab_h) / 2.0;
+    let mut x = panel.right() - pad;
+    for p in (0..app.port_count).rev() {
+        x -= tab_w;
+        let rect = Rect::new(x, tab_y, tab_w, tab_h);
+        let is_current = p == app.current_port;
+        let label = format!("P{}", p + 1);
+        if is_current {
+            renderer.fill_rect(rect, theme::GROUND);
+            let tx = rect.x + (rect.width - text_width(&label, cw)) / 2.0;
+            let ty = rect.y + (rect.height - ch) / 2.0;
+            renderer.draw_text(tx, ty, &label, theme::TITLE_BG, ch);
+        } else {
+            renderer.fill_rect(Rect::new(rect.x, rect.y, rect.width, dot), theme::TITLE_FG);
+            renderer.fill_rect(Rect::new(rect.x, rect.bottom() - dot, rect.width, dot), theme::TITLE_FG);
+            renderer.fill_rect(Rect::new(rect.x, rect.y, dot, rect.height), theme::TITLE_FG);
+            renderer.fill_rect(Rect::new(rect.right() - dot, rect.y, dot, rect.height), theme::TITLE_FG);
+            let tx = rect.x + (rect.width - text_width(&label, cw)) / 2.0;
+            let ty = rect.y + (rect.height - ch) / 2.0;
+            renderer.draw_text(tx, ty, &label, theme::TITLE_FG, ch);
+        }
+        hits.push(rect, HitAction::PortTab(p));
+        x -= pad;
+    }
 }
 
 /// Draws the header filename, marquee-scrolling it if it doesn't fit `name_w`.
@@ -268,6 +309,9 @@ fn visible_slice(text: &str, offset_cells: usize, max_cells: usize) -> String {
 }
 
 fn render_browser(renderer: &mut dyn Renderer, app: &mut App) {
+    // Only the player screen registers hit regions; keep the map empty here
+    // so stale player-screen regions can't be hit-tested while browsing.
+    app.hit_map.clear();
     if let Some(ref mut browser) = app.file_browser {
         browser.render(renderer);
     }
