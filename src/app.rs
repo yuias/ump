@@ -92,7 +92,9 @@ pub struct App {
     /// Piano roll key-range scroll offset (in semitones, relative to the
     /// centered default), adjusted by `scroll_keys`. Only takes effect when
     /// the full key range doesn't fit the available space; the render pass
-    /// clamps it to the valid range for the current geometry every frame.
+    /// clamps it to the valid range for the current geometry every frame and
+    /// writes the clamped (effective) value back here, so overshoot never
+    /// accumulates invisibly and reversing the wheel takes effect immediately.
     pub key_scroll: i32,
     /// Bitfield of channels that have at least one NoteOn event (port*16+ch).
     pub used_channels: u64,

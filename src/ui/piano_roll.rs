@@ -17,6 +17,9 @@ use crate::ui::theme;
 
 /// Render the piano roll area using the native renderer.
 /// Dispatches to horizontal or vertical mode.
+/// Returns the effective (post-clamp) key_scroll for the caller to write back
+/// to `app.key_scroll`, or `None` when the area is too small to render (no
+/// scroll state to update). See `visible_key_range` for what "effective" means.
 pub fn render_piano_roll(
     renderer: &mut dyn Renderer,
     area: Rect,
@@ -24,15 +27,15 @@ pub fn render_piano_roll(
     note_rects: &[NoteRect],
     vertical: bool,
     hits: &mut HitMap,
-) {
+) -> Option<i32> {
     if area.width < 20.0 || area.height < 10.0 || note_rects.is_empty() {
-        return;
+        return None;
     }
 
     if vertical {
-        render_vertical(renderer, area, app, note_rects, hits);
+        render_vertical(renderer, area, app, note_rects, hits)
     } else {
-        render_horizontal(renderer, area, app, note_rects, hits);
+        render_horizontal(renderer, area, app, note_rects, hits)
     }
 }
 
@@ -131,12 +134,16 @@ fn sounding_keys(notes: &[NoteRect], scan_start: usize, tick: u64, muted_mask: u
 /// If the full song range fits at >= `min_slot` px/key, shows it all. Otherwise
 /// shows as many keys as fit, centered by default and shifted by `key_scroll`
 /// (positive = toward higher keys), clamped so the visible range never leaves
-/// `[song_lo, song_hi]`.
-fn visible_key_range(song_lo: u8, song_hi: u8, extent: f32, min_slot: f32, key_scroll: i32) -> (u8, u8, f32) {
+/// `[song_lo, song_hi]`. The last element of the tuple is the *effective*
+/// key_scroll (the raw value after clamping), which the caller writes back to
+/// `app.key_scroll` so reversing the wheel takes effect immediately instead of
+/// first having to unwind whatever overshoot was clamped away; it's 0 when the
+/// whole range fits (there's nothing to scroll).
+fn visible_key_range(song_lo: u8, song_hi: u8, extent: f32, min_slot: f32, key_scroll: i32) -> (u8, u8, f32, i32) {
     let song_count = song_hi as i32 - song_lo as i32 + 1;
     let full_slot = extent / song_count as f32;
     if full_slot >= min_slot {
-        return (song_lo, song_hi, full_slot);
+        return (song_lo, song_hi, full_slot, 0);
     }
 
     let visible_count = ((extent / min_slot).floor() as i32).clamp(1, song_count);
@@ -145,7 +152,7 @@ fn visible_key_range(song_lo: u8, song_hi: u8, extent: f32, min_slot: f32, key_s
     let offset = (center_offset + key_scroll).clamp(0, song_count - visible_count);
     let lo = song_lo + offset as u8;
     let hi = lo + visible_count as u8 - 1;
-    (lo, hi, slot)
+    (lo, hi, slot, offset - center_offset)
 }
 
 /// Horizontal piano roll: time on X-axis, keys on Y-axis. The playhead sits
@@ -159,7 +166,7 @@ fn render_horizontal(
     app: &App,
     note_rects: &[NoteRect],
     hits: &mut HitMap,
-) {
+) -> Option<i32> {
     let (cw, ch) = renderer.cell_size();
     let scale = renderer.scale_factor();
     let dot = dot_size(scale);
@@ -168,7 +175,7 @@ fn render_horizontal(
     let ruler_h = ch + 2.0 * px(2.0, scale);
 
     if area.width - kb_w < 10.0 || area.height - ruler_h < 10.0 {
-        return;
+        return None;
     }
 
     let note_area = Rect::new(area.x + kb_w, area.y + ruler_h, area.width - kb_w, area.height - ruler_h);
@@ -179,7 +186,7 @@ fn render_horizontal(
     let song_lo = note_rects.iter().map(|n| n.key).min().unwrap_or(0);
     let song_hi = note_rects.iter().map(|n| n.key).max().unwrap_or(127);
     let min_slot = px(6.0, scale);
-    let (lo, hi, slot_h) = visible_key_range(song_lo, song_hi, note_area.height, min_slot, app.key_scroll);
+    let (lo, hi, slot_h, effective_scroll) = visible_key_range(song_lo, song_hi, note_area.height, min_slot, app.key_scroll);
 
     // Pixels per tick (zoom) — scale by DPI, not font size, so changing the
     // font does not change zoom. Constants match the old cw-derived values
@@ -350,6 +357,8 @@ fn render_horizontal(
             vertical: false,
         },
     );
+
+    Some(effective_scroll)
 }
 
 /// Linear tick <-> pixel-position mapping shared by the horizontal and
@@ -398,7 +407,7 @@ fn render_vertical(
     app: &App,
     note_rects: &[NoteRect],
     hits: &mut HitMap,
-) {
+) -> Option<i32> {
     let (cw, ch) = renderer.cell_size();
     let scale = renderer.scale_factor();
     let dot = dot_size(scale);
@@ -408,7 +417,7 @@ fn render_vertical(
     let ruler_w = text_width("000", cw) + 2.0 * px(3.0, scale);
 
     if area.width - ruler_w < 10.0 || area.height - kb_h < 10.0 {
-        return;
+        return None;
     }
 
     // Down: notes on top, keyboard at the bottom. Up: keyboard on top, notes below.
@@ -428,7 +437,7 @@ fn render_vertical(
     let song_lo = note_rects.iter().map(|n| n.key).min().unwrap_or(0);
     let song_hi = note_rects.iter().map(|n| n.key).max().unwrap_or(127);
     let min_slot = px(6.0, scale);
-    let (lo, hi, slot_w) = visible_key_range(song_lo, song_hi, note_area.width, min_slot, app.key_scroll);
+    let (lo, hi, slot_w, effective_scroll) = visible_key_range(song_lo, song_hi, note_area.width, min_slot, app.key_scroll);
 
     // Pixels per tick (zoom) — scale by DPI, not font size, so changing the
     // font does not change zoom. Constants match the old ch-derived values
@@ -627,6 +636,8 @@ fn render_vertical(
             vertical: true,
         },
     );
+
+    Some(effective_scroll)
 }
 
 /// Note name parts without allocation.
@@ -692,32 +703,49 @@ mod tests {
 
     #[test]
     fn visible_key_range_shows_full_range_when_it_fits() {
-        let (lo, hi, slot) = visible_key_range(40, 60, 200.0, 6.0, 0);
+        let (lo, hi, slot, effective_scroll) = visible_key_range(40, 60, 200.0, 6.0, 0);
         assert_eq!((lo, hi), (40, 60));
         assert!((slot - 200.0 / 21.0).abs() < 0.001);
+        assert_eq!(effective_scroll, 0);
     }
 
     #[test]
     fn visible_key_range_centers_when_it_does_not_fit() {
         // 100 keys at min_slot=6 needs 600px; only 60px available -> 10 keys fit, centered.
-        let (lo, hi, slot) = visible_key_range(0, 99, 60.0, 6.0, 0);
+        let (lo, hi, slot, effective_scroll) = visible_key_range(0, 99, 60.0, 6.0, 0);
         assert_eq!(hi - lo, 9);
         assert_eq!(lo, 45); // (100-10)/2
         assert!((slot - 6.0).abs() < 0.001);
+        assert_eq!(effective_scroll, 0);
     }
 
     #[test]
     fn visible_key_range_scrolls_and_clamps_at_high_end() {
-        let (lo, hi, _) = visible_key_range(0, 99, 60.0, 6.0, 1000);
+        let (lo, hi, _, effective_scroll) = visible_key_range(0, 99, 60.0, 6.0, 1000);
         assert_eq!(hi, 99); // clamped to song_hi
         assert_eq!(lo, 90);
+        // Overshoot is clamped away rather than carried invisibly: applying it
+        // again should reproduce the same (already-clamped) range.
+        let (lo2, hi2, _, _) = visible_key_range(0, 99, 60.0, 6.0, effective_scroll);
+        assert_eq!((lo2, hi2), (lo, hi));
     }
 
     #[test]
     fn visible_key_range_scrolls_and_clamps_at_low_end() {
-        let (lo, hi, _) = visible_key_range(0, 99, 60.0, 6.0, -1000);
+        let (lo, hi, _, effective_scroll) = visible_key_range(0, 99, 60.0, 6.0, -1000);
         assert_eq!(lo, 0); // clamped to song_lo
         assert_eq!(hi, 9);
+        let (lo2, hi2, _, _) = visible_key_range(0, 99, 60.0, 6.0, effective_scroll);
+        assert_eq!((lo2, hi2), (lo, hi));
+    }
+
+    #[test]
+    fn visible_key_range_reversing_after_overshoot_moves_immediately() {
+        // Scroll far past the top, then apply one step in the other direction:
+        // the range must actually move, not still be absorbing the overshoot.
+        let (_, hi_clamped, _, effective_scroll) = visible_key_range(0, 99, 60.0, 6.0, 1000);
+        let (_, hi_after_reverse, _, _) = visible_key_range(0, 99, 60.0, 6.0, effective_scroll - 1);
+        assert!(hi_after_reverse < hi_clamped);
     }
 
     #[test]

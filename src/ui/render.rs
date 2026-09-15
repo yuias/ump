@@ -90,7 +90,7 @@ fn render_player_into(renderer: &mut dyn Renderer, app: &mut App, hits: &mut Hit
     draw_panel(renderer, layout.right_panel, &right_title, layout.title_h);
     render_zoom_label(renderer, layout.right_panel, layout.title_h, app);
 
-    render_piano_roll(
+    let effective_key_scroll = render_piano_roll(
         renderer,
         layout.right_content,
         app,
@@ -98,6 +98,9 @@ fn render_player_into(renderer: &mut dyn Renderer, app: &mut App, hits: &mut Hit
         app.piano_roll_vertical,
         hits,
     );
+    if let Some(scroll) = effective_key_scroll {
+        app.key_scroll = scroll;
+    }
 
     // Transport and function-key hint bar
     render_transport(renderer, layout.transport, app, hits);
