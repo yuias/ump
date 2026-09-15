@@ -23,7 +23,7 @@ pub struct Layout {
     pub left_panel: Rect,
     /// Left panel inner content area (border excluded).
     pub left_content: Rect,
-    /// Right panel outer area (Monitor/PianoRoll, including border).
+    /// Right panel outer area (Piano Roll, including border).
     pub right_panel: Rect,
     /// Right panel inner content area (border excluded).
     pub right_content: Rect,

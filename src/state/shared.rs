@@ -72,44 +72,6 @@ impl ChannelStates {
     }
 }
 
-/// Per-channel MIDI monitor data for tracker-style display.
-/// Updated atomically from the audio thread on NoteOn/NoteOff events.
-/// Indexed by flat channel: port * 16 + channel (0..63).
-pub struct MonitorState {
-    /// Last NoteOn key per channel (0xFFFF = no note yet).
-    pub note_key: [AtomicU32; MAX_CHANNELS],
-    /// Last NoteOn velocity per channel.
-    pub note_vel: [AtomicU32; MAX_CHANNELS],
-    /// Tick of last NoteOn per channel.
-    pub note_tick: [AtomicU32; MAX_CHANNELS],
-    /// Step time: ticks since previous NoteOn on same channel.
-    pub step_time: [AtomicU32; MAX_CHANNELS],
-    /// Gate time: duration in ticks of last completed note.
-    pub gate_time: [AtomicU32; MAX_CHANNELS],
-}
-
-impl MonitorState {
-    pub fn new() -> Self {
-        MonitorState {
-            note_key: std::array::from_fn(|_| AtomicU32::new(0xFFFF)),
-            note_vel: std::array::from_fn(|_| AtomicU32::new(0)),
-            note_tick: std::array::from_fn(|_| AtomicU32::new(0)),
-            step_time: std::array::from_fn(|_| AtomicU32::new(0)),
-            gate_time: std::array::from_fn(|_| AtomicU32::new(0)),
-        }
-    }
-
-    pub fn reset(&self) {
-        for i in 0..MAX_CHANNELS {
-            self.note_key[i].store(0xFFFF, Ordering::Relaxed);
-            self.note_vel[i].store(0, Ordering::Relaxed);
-            self.note_tick[i].store(0, Ordering::Relaxed);
-            self.step_time[i].store(0, Ordering::Relaxed);
-            self.gate_time[i].store(0, Ordering::Relaxed);
-        }
-    }
-}
-
 pub struct SharedState {
     /// Current playback position in ticks.
     pub current_tick: AtomicU64,
@@ -140,8 +102,6 @@ pub struct SharedState {
     pub channel_states: ChannelStates,
     /// Drum channel bitfield: bit N = flat channel N is drum. Default: 1 << 9.
     pub drum_channels: AtomicU64,
-    /// Per-channel MIDI monitor data for tracker-style display.
-    pub monitor: MonitorState,
     /// Number of MIDI ports (1-4). Set once at MIDI load.
     pub port_count: AtomicU32,
 }
@@ -177,7 +137,6 @@ impl SharedState {
             track_info: Mutex::new(Vec::new()),
             channel_states: ChannelStates::new(),
             drum_channels: AtomicU64::new(1 << 9),
-            monitor: MonitorState::new(),
             port_count: AtomicU32::new(1),
         }
     }

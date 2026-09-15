@@ -2,13 +2,12 @@
 
 use unicode_width::UnicodeWidthChar;
 
-use crate::app::{App, AppScreen, RightPanelMode};
+use crate::app::{App, AppScreen};
 use crate::renderer::Renderer;
 use crate::ui::border::draw_border;
 use crate::ui::header::format_duration;
 use crate::ui::help::render_help;
 use crate::ui::layout::Layout;
-use crate::ui::midi_monitor::render_midi_monitor;
 use crate::ui::piano_roll::render_piano_roll;
 use crate::ui::status_bar::render_status_bar;
 use crate::ui::theme;
@@ -60,39 +59,21 @@ fn render_player(renderer: &mut dyn Renderer, app: &mut App) {
     draw_border(renderer, layout.left_panel, &left_title, theme::BORDER_COLOR);
     render_track_list(renderer, layout.left_content, app);
 
-    // Right panel: Monitor or PianoRoll
-    let right_title = match app.right_panel_mode {
-        RightPanelMode::Monitor => {
-            if app.port_count > 1 {
-                format!(" EVENT MONITOR [P{}] ", app.current_port + 1)
-            } else {
-                " EVENT MONITOR ".to_string()
-            }
-        }
-        RightPanelMode::PianoRoll => {
-            if app.piano_roll_vertical {
-                " PIANO ROLL [V] ".to_string()
-            } else {
-                " PIANO ROLL ".to_string()
-            }
-        }
+    // Right panel: Piano Roll
+    let right_title = if app.piano_roll_vertical {
+        " PIANO ROLL [V] ".to_string()
+    } else {
+        " PIANO ROLL ".to_string()
     };
     draw_border(renderer, layout.right_panel, &right_title, theme::BORDER_COLOR);
 
-    match app.right_panel_mode {
-        RightPanelMode::Monitor => {
-            render_midi_monitor(renderer, layout.right_content, app);
-        }
-        RightPanelMode::PianoRoll => {
-            render_piano_roll(
-                renderer,
-                layout.right_content,
-                app,
-                &app.note_rects,
-                app.piano_roll_vertical,
-            );
-        }
-    }
+    render_piano_roll(
+        renderer,
+        layout.right_content,
+        app,
+        &app.note_rects,
+        app.piano_roll_vertical,
+    );
 
     // Transport and status bar
     render_transport(renderer, layout.transport, app);

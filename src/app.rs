@@ -36,12 +36,6 @@ pub enum TrackViewMode {
     Detail,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RightPanelMode {
-    Monitor,
-    PianoRoll,
-}
-
 pub struct App {
     pub shared: Arc<SharedState>,
     pub sequencer: Arc<Mutex<Sequencer>>,
@@ -73,7 +67,6 @@ pub struct App {
     pub screen: AppScreen,
     pub focus: FocusPanel,
     pub track_cursor: usize,
-    pub right_panel_mode: RightPanelMode,
     pub piano_roll_vertical: bool,
     pub show_help: bool,
     pub track_view_mode: TrackViewMode,
@@ -117,18 +110,6 @@ impl App {
         if let Some(vol) = config.audio.volume {
             shared.volume.store(vol.min(100), Ordering::Relaxed);
         }
-        let right_panel_mode = match config.display.right_panel_mode.as_deref() {
-            Some("PianoRoll") => RightPanelMode::PianoRoll,
-            Some("Monitor") => RightPanelMode::Monitor,
-            _ => {
-                // Backward compat: derive from legacy fields
-                if config.display.midi_monitor.unwrap_or(false) {
-                    RightPanelMode::Monitor
-                } else {
-                    RightPanelMode::PianoRoll
-                }
-            }
-        };
         let piano_roll_vertical = config.display.piano_roll_vertical.unwrap_or(false);
         let track_view_mode = match config.display.track_view_mode.as_deref() {
             Some("Detail") => TrackViewMode::Detail,
@@ -161,7 +142,6 @@ impl App {
             screen: AppScreen::Player,
             focus: FocusPanel::TrackList,
             track_cursor: 0,
-            right_panel_mode,
             piano_roll_vertical,
             show_help: false,
             track_view_mode,
@@ -190,17 +170,6 @@ impl App {
             shared.volume.store(vol.min(100), Ordering::Relaxed);
         }
 
-        let right_panel_mode = match config.display.right_panel_mode.as_deref() {
-            Some("PianoRoll") => RightPanelMode::PianoRoll,
-            Some("Monitor") => RightPanelMode::Monitor,
-            _ => {
-                if config.display.midi_monitor.unwrap_or(false) {
-                    RightPanelMode::Monitor
-                } else {
-                    RightPanelMode::PianoRoll
-                }
-            }
-        };
         let piano_roll_vertical = config.display.piano_roll_vertical.unwrap_or(false);
         let track_view_mode = match config.display.track_view_mode.as_deref() {
             Some("Detail") => TrackViewMode::Detail,
@@ -229,7 +198,6 @@ impl App {
             screen: AppScreen::FileBrowser,
             focus: FocusPanel::TrackList,
             track_cursor: 0,
-            right_panel_mode,
             piano_roll_vertical,
             show_help: false,
             track_view_mode,
@@ -567,13 +535,6 @@ impl App {
         // TrackHeader 行では何もしない
     }
 
-    pub fn toggle_right_panel(&mut self) {
-        self.right_panel_mode = match self.right_panel_mode {
-            RightPanelMode::Monitor => RightPanelMode::PianoRoll,
-            RightPanelMode::PianoRoll => RightPanelMode::Monitor,
-        };
-    }
-
     pub fn toggle_piano_roll_orientation(&mut self) {
         self.piano_roll_vertical = !self.piano_roll_vertical;
     }
@@ -673,13 +634,6 @@ impl App {
     /// Save current state to config (call on exit).
     pub fn save_config(&mut self) {
         self.config.audio.volume = Some(self.volume());
-        self.config.display.right_panel_mode = Some(
-            match self.right_panel_mode {
-                RightPanelMode::Monitor => "Monitor",
-                RightPanelMode::PianoRoll => "PianoRoll",
-            }
-            .to_string(),
-        );
         self.config.display.piano_roll_vertical = Some(self.piano_roll_vertical);
         self.config.display.track_view_mode = Some(
             match self.track_view_mode {

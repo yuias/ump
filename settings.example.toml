@@ -41,9 +41,6 @@ size = 14.0
 # height = 720
 
 [display]
-# Right panel mode: "PianoRoll" (default) or "Monitor" (tracker-style event monitor)
-right_panel_mode = "PianoRoll"
-
 # Piano roll orientation: false = horizontal (default), true = vertical
 piano_roll_vertical = false
 

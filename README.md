@@ -27,7 +27,6 @@ Built with Rust, using hardware-accelerated rendering (wgpu) and a custom sequen
 | `Left` / `Right` | Seek -5s / +5s |
 | `Up` / `Down` | Cursor Up / Down |
 | `M` | Mute / Unmute track |
-| `P` | Toggle right panel (Monitor / Piano Roll) |
 | `V` | Toggle piano roll orientation |
 | `E` | Toggle track view (Default / Detail) |
 | `+` / `-` | Volume Up / Down |

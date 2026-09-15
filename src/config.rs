@@ -58,8 +58,6 @@ pub struct DisplayConfig {
     pub show_piano_roll: Option<bool>,
     pub track_view_mode: Option<String>,
     pub piano_roll_vertical: Option<bool>,
-    pub midi_monitor: Option<bool>,
-    pub right_panel_mode: Option<String>,
 }
 
 

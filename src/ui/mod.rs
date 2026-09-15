@@ -4,7 +4,6 @@ pub mod header;
 pub mod help;
 pub mod input;
 pub mod layout;
-pub mod midi_monitor;
 pub mod piano_roll;
 pub mod render;
 pub mod status_bar;

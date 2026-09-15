@@ -42,7 +42,6 @@ use crate::ui::render::render;
 
 /// Frame intervals by state.
 const FRAME_PIANO_ROLL: Duration = Duration::from_millis(16); // ~60fps
-const FRAME_NO_PIANO_ROLL: Duration = Duration::from_millis(100);
 const FRAME_IDLE: Duration = Duration::from_millis(200);
 
 struct UmpApp {
@@ -78,12 +77,10 @@ impl UmpApp {
     fn frame_interval(&self) -> Duration {
         match &self.app {
             Some(app) => {
-                if !app.is_playing() {
-                    FRAME_IDLE
-                } else if app.right_panel_mode == crate::app::RightPanelMode::PianoRoll {
+                if app.is_playing() {
                     FRAME_PIANO_ROLL
                 } else {
-                    FRAME_NO_PIANO_ROLL
+                    FRAME_IDLE
                 }
             }
             None => FRAME_IDLE,
