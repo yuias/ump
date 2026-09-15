@@ -4,9 +4,11 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::renderer::types::{BG_COLOR, Color, Rect};
+use crate::renderer::types::Rect;
 use crate::renderer::Renderer;
-use crate::ui::border::{draw_border, inner_rect};
+use crate::ui::border::draw_panel;
+use crate::ui::layout;
+use crate::ui::theme;
 
 /// What kind of file the browser is selecting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -218,6 +220,7 @@ impl FileBrowser {
     pub fn render(&mut self, renderer: &mut dyn Renderer) {
         let (w, h) = renderer.window_size();
         let (cw, ch) = renderer.cell_size();
+        let scale = renderer.scale_factor();
         let w_f = w as f32;
         let h_f = h as f32;
 
@@ -229,17 +232,15 @@ impl FileBrowser {
 
         let area = Rect::new(popup_x, popup_y, popup_w, popup_h);
 
-        // Clear region
-        renderer.fill_rect(area, BG_COLOR);
-
         let title = match self.target {
-            BrowseTarget::Midi => " Select MIDI File ",
-            BrowseTarget::Sf2 => " Select SoundFont ",
+            BrowseTarget::Midi => "SELECT MIDI FILE",
+            BrowseTarget::Sf2 => "SELECT SOUNDFONT",
         };
-        let border_color = Color::rgb(100, 180, 255);
-        draw_border(renderer, area, title, border_color);
+        let title_h = layout::title_height(ch, scale);
+        draw_panel(renderer, area, title, title_h);
 
-        let inner = inner_rect(area, cw, ch);
+        let dot = layout::dot_size(scale);
+        let inner = layout::panel_content(area, title_h, dot);
         if inner.width < cw * 10.0 || inner.height < ch * 3.0 {
             return;
         }
@@ -250,7 +251,7 @@ impl FileBrowser {
         } else {
             self.current_dir.to_string_lossy().to_string()
         };
-        let path_fg = Color::rgb(180, 180, 200);
+        let path_fg = theme::DIM;
         renderer.draw_text(inner.x + cw, inner.y + ch, &header_text, path_fg, ch);
 
         // File list
@@ -272,19 +273,18 @@ impl FileBrowser {
 
             // Selection background
             if is_selected {
-                let highlight_bg = Color::rgb(50, 50, 80);
                 renderer.fill_rect(
                     Rect::new(inner.x, screen_y, inner.width, row_h),
-                    highlight_bg,
+                    theme::SELECTED_BG,
                 );
             }
 
             let (icon, color) = if self.show_drives {
-                ("\u{1F4BD}  ", Color::rgb(255, 200, 100))
+                ("\u{1F4BD}  ", theme::ACCENT)
             } else if entry.is_dir {
-                ("\u{1F4C1}  ", Color::rgb(100, 200, 255))
+                ("\u{1F4C1}  ", theme::FRAME)
             } else {
-                ("\u{1F3B5}  ", Color::rgb(200, 200, 220))
+                ("\u{1F3B5}  ", theme::TEXT)
             };
 
             let prefix = if is_selected { "> " } else { "  " };
@@ -299,7 +299,7 @@ impl FileBrowser {
         } else {
             "\u{2191}\u{2193}:Move  Enter:Select  BS:Parent  Home:Home  /:Drives  Esc:Cancel"
         };
-        let help_fg = Color::rgb(120, 120, 140);
+        let help_fg = theme::DIM;
         renderer.draw_text(inner.x + cw, help_y, help_text, help_fg, ch);
     }
 }

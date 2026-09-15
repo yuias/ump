@@ -3,13 +3,15 @@
 use unicode_width::UnicodeWidthChar;
 
 use crate::app::{App, AppScreen};
+use crate::renderer::types::Rect;
 use crate::renderer::Renderer;
-use crate::ui::border::draw_border;
+use crate::ui::border::draw_panel;
 use crate::ui::header::format_duration;
 use crate::ui::help::render_help;
-use crate::ui::layout::Layout;
+use crate::ui::layout::{px, Layout};
 use crate::ui::piano_roll::render_piano_roll;
 use crate::ui::status_bar::render_status_bar;
+use crate::ui::text::{text_cells, text_width};
 use crate::ui::theme;
 use crate::ui::track_list::render_track_list;
 use crate::ui::transport::render_transport;
@@ -33,39 +35,38 @@ pub fn render(renderer: &mut dyn Renderer, app: &mut App) {
 fn render_player(renderer: &mut dyn Renderer, app: &mut App) {
     let (w, h) = renderer.window_size();
     let (cw, ch) = renderer.cell_size();
-    let cols = (w as f32 / cw) as u16;
-    let rows = (h as f32 / ch) as u16;
 
-    if cols < 10 || rows < 8 {
+    if (w as f32) < 20.0 * cw || (h as f32) < 10.0 * ch {
         return;
     }
 
-    let layout = Layout::compute(cols, rows, cw, ch);
+    let scale = renderer.scale_factor();
+    let layout = Layout::compute(w as f32, h as f32, cw, ch, scale);
 
     // Header
-    render_header_native(renderer, app);
+    render_header_native(renderer, layout.header, app);
 
     // Left panel: TRACK
     let left_title = match app.track_view_mode {
         crate::app::TrackViewMode::Default => {
             if app.port_count > 1 {
-                format!(" TRACK [P{}] ", app.current_port + 1)
+                format!("TRACK [P{}]", app.current_port + 1)
             } else {
-                " TRACK ".to_string()
+                "TRACK".to_string()
             }
         }
-        crate::app::TrackViewMode::Detail => " TRACK [Detail] ".to_string(),
+        crate::app::TrackViewMode::Detail => "TRACK [Detail]".to_string(),
     };
-    draw_border(renderer, layout.left_panel, &left_title, theme::BORDER_COLOR);
+    draw_panel(renderer, layout.left_panel, &left_title, layout.title_h);
     render_track_list(renderer, layout.left_content, app);
 
     // Right panel: Piano Roll
     let right_title = if app.piano_roll_vertical {
-        " PIANO ROLL [V] ".to_string()
+        "PIANO ROLL [V]".to_string()
     } else {
-        " PIANO ROLL ".to_string()
+        "PIANO ROLL".to_string()
     };
-    draw_border(renderer, layout.right_panel, &right_title, theme::BORDER_COLOR);
+    draw_panel(renderer, layout.right_panel, &right_title, layout.title_h);
 
     render_piano_roll(
         renderer,
@@ -75,9 +76,9 @@ fn render_player(renderer: &mut dyn Renderer, app: &mut App) {
         app.piano_roll_vertical,
     );
 
-    // Transport and status bar
+    // Transport and function-key hint bar
     render_transport(renderer, layout.transport, app);
-    render_status_bar(renderer, layout.status_bar);
+    render_status_bar(renderer, layout.fkey_bar);
 
     // Help overlay: rendered in a separate layer so its background
     // correctly covers the base layer text (wgpu z-order fix).
@@ -88,18 +89,19 @@ fn render_player(renderer: &mut dyn Renderer, app: &mut App) {
 }
 
 /// Header row: filename (scrolling if long) + metadata, single line.
-fn render_header_native(renderer: &mut dyn Renderer, app: &App) {
+fn render_header_native(renderer: &mut dyn Renderer, area: Rect, app: &App) {
     let (cw, ch) = renderer.cell_size();
+    let scale = renderer.scale_factor();
 
-    let mut x = cw;
-    let y = (ch - (ch * 0.8)) / 1.25;
+    let mut x = area.x + px(4.0, scale);
+    let y = area.y + (area.height - ch) / 2.0;
 
     // Filename (with marquee scroll for long names)
     if !app.file_name.is_empty() {
-        let name_width = display_width(&app.file_name);
+        let name_width = text_cells(&app.file_name);
 
         if name_width <= MAX_NAME_CELLS {
-            renderer.draw_text(x, y, &app.file_name, theme::HEADER_FG, ch);
+            renderer.draw_text(x, y, &app.file_name, theme::TEXT, ch);
             x += name_width as f32 * cw;
         } else {
             // Marquee scroll: pause → scroll → loop
@@ -118,12 +120,12 @@ fn render_header_native(renderer: &mut dyn Renderer, app: &App) {
             let gap = " ".repeat(SCROLL_GAP);
             let looping = format!("{}{}{}", app.file_name, gap, app.file_name);
             let visible = visible_slice(&looping, offset, MAX_NAME_CELLS - 2);
-            renderer.draw_text(x, y, &visible, theme::HEADER_FG, ch);
+            renderer.draw_text(x, y, &visible, theme::TEXT, ch);
             x += MAX_NAME_CELLS as f32 * cw;
         }
     }
 
-    // Metadata fields (all ASCII — .len() is correct)
+    // Metadata fields (all ASCII — text_width is equivalent to .len() here)
     let bpm = app.current_bpm();
     let (ts_num, ts_den) = app.time_signature();
     let sep = " | ";
@@ -144,25 +146,18 @@ fn render_header_native(renderer: &mut dyn Renderer, app: &App) {
     }
 
     for field in &fields {
-        renderer.draw_text(x, y, sep, theme::BORDER_COLOR, ch);
-        x += sep.len() as f32 * cw;
-        renderer.draw_text(x, y, field, theme::HEADER_FG, ch);
-        x += field.len() as f32 * cw;
+        renderer.draw_text(x, y, sep, theme::FRAME, ch);
+        x += text_width(sep, cw);
+        renderer.draw_text(x, y, field, theme::TEXT, ch);
+        x += text_width(field, cw);
     }
 
     if !app.sf2_name.is_empty() {
-        renderer.draw_text(x, y, sep, theme::BORDER_COLOR, ch);
-        x += sep.len() as f32 * cw;
+        renderer.draw_text(x, y, sep, theme::FRAME, ch);
+        x += text_width(sep, cw);
         let sf2 = format!("SF2: {}", app.sf2_name);
-        renderer.draw_text(x, y, &sf2, theme::PROGRESS_FILLED, ch);
+        renderer.draw_text(x, y, &sf2, theme::FRAME, ch);
     }
-}
-
-/// Display width of a string (CJK = 2 cells, ASCII = 1 cell).
-fn display_width(s: &str) -> usize {
-    s.chars()
-        .map(|c| UnicodeWidthChar::width(c).unwrap_or(1))
-        .sum()
 }
 
 /// Extract visible substring at a given cell offset with max visible width.
@@ -173,7 +168,7 @@ fn visible_slice(text: &str, offset_cells: usize, max_cells: usize) -> String {
     let end = offset_cells + max_cells;
 
     for ch in text.chars() {
-        let w = UnicodeWidthChar::width(ch).unwrap_or(1);
+        let w = UnicodeWidthChar::width_cjk(ch).unwrap_or(1);
         if pos >= offset_cells && pos + w <= end {
             result.push(ch);
         }

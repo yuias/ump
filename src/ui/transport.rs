@@ -8,7 +8,7 @@ use crate::ui::theme;
 
 pub fn render_transport(renderer: &mut dyn Renderer, area: Rect, app: &App) {
     let (cw, ch) = renderer.cell_size();
-    let fg = theme::HEADER_FG;
+    let fg = theme::TEXT;
 
     let mut x = area.x;
     let y = area.y;
@@ -52,13 +52,13 @@ pub fn render_transport(renderer: &mut dyn Renderer, area: Rect, app: &App) {
         if filled_w > 0.0 {
             renderer.fill_rect(
                 Rect::new(x, y, filled_w, ch),
-                theme::PROGRESS_FILLED,
+                theme::FRAME,
             );
         }
         if empty_w > 0.0 {
             renderer.fill_rect(
                 Rect::new(x + filled_w, y, empty_w, ch),
-                theme::PROGRESS_EMPTY,
+                theme::WELL,
             );
         }
         x += progress_w;
@@ -84,13 +84,13 @@ pub fn render_transport(renderer: &mut dyn Renderer, area: Rect, app: &App) {
     if filled_w > 0.0 {
         renderer.fill_rect(
             Rect::new(x, y, filled_w, ch),
-            theme::PROGRESS_FILLED,
+            theme::FRAME,
         );
     }
     if empty_w > 0.0 {
         renderer.fill_rect(
             Rect::new(x + filled_w, y, empty_w, ch),
-            theme::PROGRESS_EMPTY,
+            theme::WELL,
         );
     }
 }

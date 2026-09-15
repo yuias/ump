@@ -3,7 +3,7 @@
 use std::sync::atomic::Ordering;
 
 use crate::app::{App, TrackViewMode};
-use crate::renderer::types::{Color, Rect};
+use crate::renderer::types::Rect;
 use crate::renderer::Renderer;
 use crate::state::TrackInfoSnapshot;
 use ump_playback::synth::gm::gm_instrument_name;
@@ -102,11 +102,11 @@ fn render_track_header(
     row_h: f32,
     app: &App,
 ) {
-    let dim = theme::HEADER_DIM;
+    let dim = theme::DIM;
     let y = area.y;
 
     // // Separator line below header
-    // renderer.draw_hline(area.x, area.x + area.width, y + row_h, theme::BORDER_COLOR, 1.0);
+    // renderer.draw_hline(area.x, area.x + area.width, y + row_h, theme::FRAME, 1.0);
 
     match app.track_view_mode {
         TrackViewMode::Default => {
@@ -177,11 +177,11 @@ fn render_default_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App)
         let is_selected = app.track_cursor == ch_idx as usize;
 
         let ch_color = if is_muted {
-            theme::MUTED_COLOR
+            theme::DIM
         } else {
             theme::channel_color(ch_idx)
         };
-        let inactive_color = Color::rgb(50, 50, 60);
+        let inactive_color = theme::DIM;
 
         if is_selected {
             renderer.fill_rect(Rect::new(area.x, y, area.width, row_h), theme::SELECTED_BG);
@@ -209,7 +209,7 @@ fn render_default_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App)
         x += label.len() as f32 * cw;
 
         // Parameters: P, V, Pan, E
-        let dim = if is_muted { theme::MUTED_COLOR } else { theme::HEADER_FG };
+        let dim = if is_muted { theme::DIM } else { theme::TEXT };
         let vol = cs.volume[ci].load(Ordering::Relaxed);
         let pan = cs.pan[ci].load(Ordering::Relaxed);
         let exp = cs.expression[ci].load(Ordering::Relaxed);
@@ -241,9 +241,9 @@ fn render_default_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App)
             "    "
         };
         let status_color = if is_muted {
-            Color::rgb(255, 80, 80)
+            theme::PLAYHEAD
         } else {
-            Color::rgb(80, 200, 80)
+            theme::OK
         };
         let status_x = area.x + area.width - status_len as f32 * cw;
         if status_x > x {
@@ -299,7 +299,7 @@ fn render_detail_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App) 
                     String::new()
                 };
                 let text = format!("{}{}{}", prefix, port_label, name);
-                renderer.draw_text_bold(area.x, screen_y, &text, theme::HEADER_FG, ch);
+                renderer.draw_text_bold(area.x, screen_y, &text, theme::TEXT, ch);
             }
             RawRow::Channel { port, channel, .. } => {
                 let ch_idx = *channel;
@@ -307,7 +307,7 @@ fn render_detail_track_list(renderer: &mut dyn Renderer, area: Rect, app: &App) 
                 let is_muted = muted_mask & (1u64 << flat_ch) != 0;
                 let color = theme::channel_color(ch_idx);
 
-                let fg = if is_muted { theme::MUTED_COLOR } else { color };
+                let fg = if is_muted { theme::DIM } else { color };
                 let dot = if is_muted { "\u{25CB}" } else { "\u{25CF}" };
 
                 let text = format!("{}  {} Ch{:>2}", prefix, dot, ch_idx + 1);

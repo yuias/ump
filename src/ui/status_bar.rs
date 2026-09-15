@@ -1,16 +1,19 @@
 //! Bottom status bar: quick action hints.
 
-use crate::renderer::types::{Color, Rect};
+use crate::renderer::types::Rect;
 use crate::renderer::Renderer;
-use crate::ui::layout::SECTION_PADDING_X;
+use crate::ui::layout::px;
+use crate::ui::text::text_width;
+use crate::ui::theme;
 
 pub fn render_status_bar(renderer: &mut dyn Renderer, area: Rect) {
     let (cw, ch) = renderer.cell_size();
-    let key_fg = Color::rgb(20, 20, 30);
-    let key_bg = Color::rgb(160, 160, 180);
-    let desc_fg = Color::rgb(140, 140, 160);
+    let scale = renderer.scale_factor();
+    let key_fg = theme::FKEY_FG;
+    let key_bg = theme::FKEY_BG;
+    let desc_fg = theme::DIM;
 
-    let mut x = area.x + SECTION_PADDING_X as f32 * cw;
+    let mut x = area.x + px(6.0, scale);
     let y = area.y;
 
     let badges: &[(&str, &str)] = &[
@@ -27,14 +30,14 @@ pub fn render_status_bar(renderer: &mut dyn Renderer, area: Rect) {
 
     for (key, desc) in badges {
         // Key badge: background rect + bold text
-        let key_w = key.len() as f32 * cw;
+        let key_w = text_width(key, cw);
         renderer.fill_rect(Rect::new(x, y, key_w, ch), key_bg);
         renderer.draw_text_bold(x, y, key, key_fg, ch);
         x += key_w;
 
         // Description text
         renderer.draw_text(x, y, desc, desc_fg, ch);
-        x += desc.len() as f32 * cw;
+        x += text_width(desc, cw);
 
         // Gap
         x += cw;

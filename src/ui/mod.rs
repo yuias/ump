@@ -7,6 +7,7 @@ pub mod layout;
 pub mod piano_roll;
 pub mod render;
 pub mod status_bar;
+pub mod text;
 pub mod theme;
 pub mod track_list;
 pub mod transport;

@@ -4,7 +4,7 @@
 
 use crate::app::App;
 use ump_playback::midi::event::NoteRect;
-use crate::renderer::types::{Color, Rect};
+use crate::renderer::types::Rect;
 use crate::renderer::Renderer;
 use crate::ui::theme;
 
@@ -53,8 +53,10 @@ fn render_horizontal(
     let max_key = note_rects.iter().map(|n| n.key).max().unwrap_or(127);
     let key_range = (max_key - min_key + 1) as f32;
 
-    // Pixels per tick (zoom) — scale by cell width to match old cell-based units
-    let pixels_per_tick = 0.05 * app.zoom_level * cw as f64;
+    // Pixels per tick (zoom) — scale by DPI, not font size, so changing the
+    // font does not change zoom. Constants match the old cw-derived values
+    // closely enough at a 14px font.
+    let pixels_per_tick = 0.05 * app.zoom_level * (8.0 * renderer.scale_factor()) as f64;
 
     // Current playback tick
     let current_tick = app.current_tick();
@@ -92,9 +94,9 @@ fn render_horizontal(
         let label_y = slot_y + (note_h - label_font_size).max(0.0) / 2.0;
 
         let label_color = if is_black_key(key) {
-            Color::rgb(100, 100, 100)
+            theme::DIM
         } else {
-            theme::HEADER_FG
+            theme::TEXT
         };
 
         let (note_str, octave) = key_name_parts(key);
@@ -109,7 +111,7 @@ fn render_horizontal(
         area.x + label_width_px,
         inner_y,
         inner_y + inner_h,
-        theme::BORDER_COLOR,
+        theme::FRAME,
         1.0,
     );
 
@@ -141,11 +143,6 @@ fn render_horizontal(
 
         let flat_ch = note.port as u64 * 16 + note.channel as u64;
         let muted = muted_mask & (1u64 << flat_ch) != 0;
-        let color = if muted {
-            theme::MUTED_COLOR
-        } else {
-            theme::channel_color(note.channel)
-        };
 
         let offset = (max_key - note.key) as f32;
         let slot_y = inner_y + offset * note_h;
@@ -164,17 +161,19 @@ fn render_horizontal(
             continue;
         }
 
-        renderer.fill_rect(
-            Rect::new(x0, bar_y, (x1 - x0).max(1.0), bar_h),
-            color,
-        );
+        let rect = Rect::new(x0, bar_y, (x1 - x0).max(1.0), bar_h);
+        if muted {
+            renderer.fill_rect(rect, theme::DIM);
+        } else {
+            theme::channel_fill(renderer, rect, note.channel, None);
+        }
     }
 
     // Draw playhead
     let playhead_x_f = (current_tick as f64 - view_start_tick as f64) * pixels_per_tick;
     let playhead_x = inner_x + playhead_x_f as f32;
     if playhead_x >= inner_x && playhead_x <= inner_x + inner_w {
-        renderer.draw_vline(playhead_x, inner_y, inner_y + inner_h, theme::PLAYHEAD_COLOR, 1.5);
+        renderer.draw_vline(playhead_x, inner_y, inner_y + inner_h, theme::PLAYHEAD, 1.5);
     }
 }
 
@@ -222,9 +221,9 @@ fn render_vertical(
         let slot_x = inner_x + offset * note_w;
 
         let label_color = if is_black_key(key) {
-            Color::rgb(100, 100, 100)
+            theme::DIM
         } else {
-            theme::HEADER_FG
+            theme::TEXT
         };
 
         let (note_str, octave) = key_name_parts(key);
@@ -239,12 +238,14 @@ fn render_vertical(
         inner_y,
         inner_x,
         inner_x + inner_w,
-        theme::BORDER_COLOR,
+        theme::FRAME,
         1.0,
     );
 
-    // Pixels per tick (zoom) — scale by cell height
-    let pixels_per_tick = 0.05 * app.zoom_level * ch as f64;
+    // Pixels per tick (zoom) — scale by DPI, not font size, so changing the
+    // font does not change zoom. Constants match the old ch-derived values
+    // closely enough at a 14px font.
+    let pixels_per_tick = 0.05 * app.zoom_level * (16.0 * renderer.scale_factor()) as f64;
 
     // Current playback tick
     let current_tick = app.current_tick();
@@ -291,11 +292,6 @@ fn render_vertical(
 
         let flat_ch = note.port as u64 * 16 + note.channel as u64;
         let muted = muted_mask & (1u64 << flat_ch) != 0;
-        let color = if muted {
-            theme::MUTED_COLOR
-        } else {
-            theme::channel_color(note.channel)
-        };
 
         let key_offset = (note.key - min_key) as f32;
         let slot_x = inner_x + key_offset * note_w;
@@ -315,17 +311,19 @@ fn render_vertical(
             continue;
         }
 
-        renderer.fill_rect(
-            Rect::new(bar_x, y0, bar_w, (y1 - y0).max(1.0)),
-            color,
-        );
+        let rect = Rect::new(bar_x, y0, bar_w, (y1 - y0).max(1.0));
+        if muted {
+            renderer.fill_rect(rect, theme::DIM);
+        } else {
+            theme::channel_fill(renderer, rect, note.channel, None);
+        }
     }
 
     // Draw playhead (horizontal line)
     let playhead_y_f = (current_tick as f64 - view_start_tick as f64) * pixels_per_tick;
     let playhead_y = inner_y + playhead_y_f as f32;
     if playhead_y >= inner_y && playhead_y <= inner_y + inner_h {
-        renderer.draw_hline(playhead_y, inner_x, inner_x + inner_w,theme::PLAYHEAD_COLOR, 1.5);
+        renderer.draw_hline(playhead_y, inner_x, inner_x + inner_w,theme::PLAYHEAD, 1.5);
     }
 }
 

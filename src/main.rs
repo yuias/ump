@@ -30,8 +30,8 @@ use crate::config::Config;
 use ump_playback::midi::parser::parse_midi;
 #[cfg(feature = "wgpu-backend")]
 use crate::renderer::wgpu_backend::WgpuRenderer;
-use crate::renderer::types::BG_COLOR;
 use crate::renderer::Renderer;
+use crate::ui::theme;
 use ump_playback::sequencer::Sequencer;
 use crate::state::{SharedState, TrackInfoSnapshot};
 use crate::synth::audio::{query_sample_rate, AudioOutput};
@@ -366,7 +366,7 @@ impl ApplicationHandler for UmpApp {
                 {
                     match renderer.begin_frame() {
                         Ok(()) => {
-                            renderer.clear(BG_COLOR);
+                            renderer.clear(theme::GROUND);
                             render(renderer, app);
                             if let Err(e) = renderer.end_frame() {
                                 log_warn!("Render error: {}", e);

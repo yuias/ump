@@ -1,82 +1,170 @@
 //! Layout computation: converts window pixel dimensions to pixel regions.
-//! Left-right split layout (RCP-98 style).
+//! Left-right split layout (PC-98 style). All inputs/outputs are physical px.
 
 use crate::renderer::types::Rect;
-use crate::ui::border::inner_rect;
-
-/// Margin between sibling sections (cell rows). BG_COLOR is visible in this gap.
-pub const SECTION_MARGIN: u16 = 1;
-
-/// Horizontal padding inside sections (cell columns).
-pub const SECTION_PADDING_X: u16 = 1;
 
 /// Standard row height multiplier (relative to cell_h).
 /// All list-style components should use `cell_h * ROW_HEIGHT` for line spacing.
 pub const ROW_HEIGHT: f32 = 1.15;
 
-/// Left panel width in cell columns.
-const LEFT_PANEL_COLS: u16 = 60;
+/// Outer gutter and inter-region gap, in logical px.
+const GUTTER: f32 = 6.0;
+
+/// Convert a logical px value to a physical px value at the given scale factor,
+/// rounded to the nearest whole pixel.
+pub fn px(logical: f32, scale: f32) -> f32 {
+    (logical * scale).round()
+}
+
+/// Frame line width, matching `Renderer::dot_size()`. Layout has no renderer
+/// instance to call, so the formula is duplicated here; keep both in sync.
+pub fn dot_size(scale: f32) -> f32 {
+    scale.round().max(1.0)
+}
+
+/// Height of a panel's title strip, given the cell height and scale factor.
+pub fn title_height(cell_h: f32, scale: f32) -> f32 {
+    cell_h + 2.0 * px(2.0, scale)
+}
+
+/// Inner content rect of a panel: frame excluded on all sides, title strip
+/// excluded from the top (the top frame edge lies inside the title strip).
+pub fn panel_content(area: Rect, title_h: f32, dot: f32) -> Rect {
+    Rect::new(
+        area.x + dot,
+        area.y + title_h,
+        (area.width - 2.0 * dot).max(0.0),
+        (area.height - title_h - dot).max(0.0),
+    )
+}
 
 /// Computed layout regions for the player screen (all pixel-based).
 pub struct Layout {
-    /// Left panel outer area (TRACK, including border).
+    /// Left panel outer area (TRACK, including frame).
     pub left_panel: Rect,
-    /// Left panel inner content area (border excluded).
+    /// Left panel inner content area (frame and title strip excluded).
     pub left_content: Rect,
-    /// Right panel outer area (Piano Roll, including border).
+    /// Right panel outer area (Piano Roll, including frame).
     pub right_panel: Rect,
-    /// Right panel inner content area (border excluded).
+    /// Right panel inner content area (frame and title strip excluded).
     pub right_content: Rect,
+    /// Header row.
+    pub header: Rect,
     /// Playback control bar.
     pub transport: Rect,
-    /// Quick action hints bar.
-    pub status_bar: Rect,
+    /// Function-key hint bar.
+    pub fkey_bar: Rect,
+    /// Panel title strip height (shared by left/right panels).
+    pub title_h: f32,
 }
 
 impl Layout {
-    /// Compute layout from total grid dimensions.
+    /// Compute layout from window pixel dimensions.
     ///
-    /// Layout order (top to bottom):
-    ///   Header (1 row) → margin → [Left | Right panels] → margin →
-    ///   Transport (1 row) → margin → Status bar (1 row)
-    pub fn compute(cols: u16, rows: u16, cell_w: f32, cell_h: f32) -> Self {
-        // Fixed rows: header(1) + margins(3) + transport(1) + status(1)
-        let header_rows: u16 = 1;
-        let transport_rows: u16 = 1;
-        let status_rows: u16 = 1;
-        let margins: u16 = 3; // header↔content, content↔transport, transport↔status
+    /// Layout order (top to bottom), gutter/gap = `px(6)`:
+    ///   Header → [Left | Right panels] → Transport → Function-key bar
+    /// The content row absorbs any leftover height.
+    pub fn compute(window_w: f32, window_h: f32, cell_w: f32, cell_h: f32, scale: f32) -> Self {
+        let gutter = px(GUTTER, scale);
+        let dot = dot_size(scale);
 
-        let fixed = header_rows + transport_rows + status_rows + margins * SECTION_MARGIN;
-        let content_rows = rows.saturating_sub(fixed).max(1);
+        let full_w = (window_w - 2.0 * gutter).max(0.0);
+        let content_x = gutter;
 
-        let content_y = (header_rows + SECTION_MARGIN) as f32 * cell_h;
-        let content_h = content_rows as f32 * cell_h;
-        let full_w = cols as f32 * cell_w;
+        let header_h = cell_h + 2.0 * px(4.0, scale);
+        let header_y = gutter;
 
-        // Left panel: fixed width
-        let left_w = (LEFT_PANEL_COLS as f32 * cell_w).min(full_w * 0.5);
-        let left_panel = Rect::new(0.0, content_y, left_w, content_h);
-        let left_content = inner_rect(left_panel, cell_w, cell_h);
+        let transport_h = cell_h + 2.0 * px(8.0, scale);
+        let fkey_h = cell_h + 2.0 * px(3.0, scale);
 
-        // Right panel: remaining width
-        let right_x = left_w;
-        let right_w = (full_w - left_w).max(0.0);
+        let fkey_y = window_h - gutter - fkey_h;
+        let transport_y = fkey_y - gutter - transport_h;
+
+        let content_y = header_y + header_h + gutter;
+        let content_h = (transport_y - gutter - content_y).max(0.0);
+
+        let left_w = (60.0 * cell_w).min(full_w * 0.45).round();
+        let right_x = content_x + left_w + gutter;
+        let right_w = (full_w - left_w - gutter).max(0.0);
+
+        let left_panel = Rect::new(content_x, content_y, left_w, content_h);
         let right_panel = Rect::new(right_x, content_y, right_w, content_h);
-        let right_content = inner_rect(right_panel, cell_w, cell_h);
 
-        let transport_y = content_y + content_h + SECTION_MARGIN as f32 * cell_h;
-        let transport = Rect::new(0.0, transport_y, full_w, cell_h);
+        let title_h = title_height(cell_h, scale);
+        let left_content = panel_content(left_panel, title_h, dot);
+        let right_content = panel_content(right_panel, title_h, dot);
 
-        let status_y = transport_y + cell_h + SECTION_MARGIN as f32 * cell_h;
-        let status_bar = Rect::new(0.0, status_y, full_w, cell_h);
+        let header = Rect::new(content_x, header_y, full_w, header_h);
+        let transport = Rect::new(content_x, transport_y, full_w, transport_h);
+        let fkey_bar = Rect::new(content_x, fkey_y, full_w, fkey_h);
 
         Layout {
             left_panel,
             left_content,
             right_panel,
             right_content,
+            header,
             transport,
-            status_bar,
+            fkey_bar,
+            title_h,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn overlaps(a: Rect, b: Rect) -> bool {
+        a.x < b.right() && b.x < a.right() && a.y < b.bottom() && b.y < a.bottom()
+    }
+
+    fn check_layout(window_w: f32, window_h: f32, cell_w: f32, cell_h: f32, scale: f32) {
+        let l = Layout::compute(window_w, window_h, cell_w, cell_h, scale);
+        let gutter = px(GUTTER, scale);
+
+        // Top-level regions must not overlap each other.
+        let regions = [l.header, l.left_panel, l.right_panel, l.transport, l.fkey_bar];
+        for i in 0..regions.len() {
+            for j in (i + 1)..regions.len() {
+                assert!(
+                    !overlaps(regions[i], regions[j]),
+                    "regions {i} and {j} overlap at {window_w}x{window_h}@{scale}"
+                );
+            }
+        }
+
+        // All regions must stay within the window minus the outer gutter.
+        for r in regions {
+            assert!(r.x >= gutter - 0.5, "region left of gutter: {:?}", r);
+            assert!(r.y >= gutter - 0.5, "region above gutter: {:?}", r);
+            assert!(
+                r.right() <= window_w - gutter + 0.5,
+                "region right of gutter: {:?}",
+                r
+            );
+            assert!(
+                r.bottom() <= window_h - gutter + 0.5,
+                "region below gutter: {:?}",
+                r
+            );
+        }
+
+        // fkey bar sits flush against the bottom gutter.
+        assert!((l.fkey_bar.bottom() - (window_h - gutter)).abs() < 0.5);
+
+        // Left panel must not exceed 45% of the content row's width.
+        let content_w = l.left_panel.width + gutter + l.right_panel.width;
+        assert!(l.left_panel.width <= content_w * 0.45 + 0.5);
+    }
+
+    #[test]
+    fn layout_1280x720_scale_1_cell_8x16() {
+        check_layout(1280.0, 720.0, 8.0, 16.0, 1.0);
+    }
+
+    #[test]
+    fn layout_2560x1440_scale_2_cell_16x32() {
+        check_layout(2560.0, 1440.0, 16.0, 32.0, 2.0);
     }
 }

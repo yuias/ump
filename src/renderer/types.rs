@@ -45,6 +45,3 @@ impl Rect {
         self.y + self.height
     }
 }
-
-/// Background color constant.
-pub const BG_COLOR: Color = Color::rgb(20, 20, 30);
