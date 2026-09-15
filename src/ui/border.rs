@@ -19,12 +19,13 @@ pub fn draw_border(renderer: &mut dyn Renderer, area: Rect, title: &str, color: 
 
     // Top edge
     renderer.draw_hline(top, left, right, color, line_w);
-    // Bottom edge
-    renderer.draw_hline(bottom, left, right, color, line_w);
+    // Bottom edge: drawn inward so the frame stays inside `area` now that
+    // draw_hline/draw_vline place a line starting at its coordinate, not centered on it.
+    renderer.draw_hline(bottom - line_w, left, right, color, line_w);
     // Left edge
     renderer.draw_vline(left, top, bottom, color, line_w);
-    // Right edge
-    renderer.draw_vline(right, top, bottom, color, line_w);
+    // Right edge: drawn inward, see bottom edge comment above.
+    renderer.draw_vline(right - line_w, top, bottom, color, line_w);
 
     // Title centered on top edge
     if !title.is_empty() {

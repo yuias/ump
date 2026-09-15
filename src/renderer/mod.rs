@@ -46,6 +46,10 @@ pub trait Renderer {
     /// Fill a pixel rectangle with a solid color.
     fn fill_rect(&mut self, rect: types::Rect, color: Color);
 
+    /// Fill a rect with a checkerboard of `fg` and `bg` dots aligned to screen pixels.
+    /// `bg: None` leaves the off-dots transparent so underlying content shows through.
+    fn fill_dither(&mut self, rect: types::Rect, fg: Color, bg: Option<Color>);
+
     /// Draw a vertical line.
     fn draw_vline(&mut self, x: f32, y_top: f32, y_bottom: f32, color: Color, width: f32);
 
@@ -63,6 +67,15 @@ pub trait Renderer {
 
     /// Get the window/surface size in pixels (width, height).
     fn window_size(&self) -> (u32, u32);
+
+    /// Window scale factor (1.0 = 96 DPI).
+    fn scale_factor(&self) -> f32;
+
+    /// Size of one "dot" in physical pixels: the scale factor rounded, at least 1.
+    /// Also used as the standard frame line width.
+    fn dot_size(&self) -> f32 {
+        self.scale_factor().round().max(1.0)
+    }
 
     /// Begin an overlay layer. Subsequent draw calls belong to the overlay,
     /// which is rendered on top of all previous content (including text).

@@ -11,6 +11,10 @@ pub struct RectInstance {
     pub rect: [f32; 4],
     /// r, g, b, a in 0.0..1.0.
     pub color: [f32; 4],
+    /// Off-dot color for the checker pattern; alpha 0.0 leaves it transparent.
+    pub bg: [f32; 4],
+    /// [0] = pattern (0.0 solid, 1.0 checker), [1] = dot size in physical px, [2..4] reserved.
+    pub params: [f32; 4],
 }
 
 /// Screen-size uniform data.
@@ -106,6 +110,18 @@ impl RectPipeline {
                     offset: 16,
                     shader_location: 1,
                 },
+                // bg: vec4<f32> at location(2)
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x4,
+                    offset: 32,
+                    shader_location: 2,
+                },
+                // params: vec4<f32> at location(3)
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x4,
+                    offset: 48,
+                    shader_location: 3,
+                },
             ],
         };
 
@@ -158,5 +174,30 @@ impl RectPipeline {
             _pad: [0.0; 2],
         };
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rect_instance_is_64_bytes() {
+        assert_eq!(std::mem::size_of::<RectInstance>(), 64);
+    }
+
+    // wgpu only validates WGSL when the pipeline is created against a real
+    // adapter, which our build/CI does not exercise. Parse and validate the
+    // shader offline with naga instead so a syntax or type error fails fast.
+    #[test]
+    fn shader_wgsl_is_valid() {
+        let module = wgpu::naga::front::wgsl::parse_str(include_str!("shader.wgsl"))
+            .expect("shader.wgsl failed to parse");
+        wgpu::naga::valid::Validator::new(
+            wgpu::naga::valid::ValidationFlags::all(),
+            wgpu::naga::valid::Capabilities::all(),
+        )
+        .validate(&module)
+        .expect("shader.wgsl failed naga validation");
     }
 }

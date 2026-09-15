@@ -261,7 +261,14 @@ impl ApplicationHandler for UmpApp {
 
         #[cfg(feature = "wgpu-backend")]
         {
-            match WgpuRenderer::new(window.clone(), size.width, size.height, font_path.as_deref(), font_size) {
+            match WgpuRenderer::new(
+                window.clone(),
+                size.width,
+                size.height,
+                font_path.as_deref(),
+                font_size,
+                window.scale_factor() as f32,
+            ) {
                 Ok(renderer) => self.renderer = Some(renderer),
                 Err(e) => {
                     log_error!("Failed to create wgpu renderer: {}", e);
@@ -301,6 +308,16 @@ impl ApplicationHandler for UmpApp {
             WindowEvent::Resized(size) => {
                 if let Some(ref mut renderer) = self.renderer {
                     let _ = renderer.resize(size.width, size.height);
+                }
+                self.needs_draw = true;
+            }
+
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                if let Some(ref mut renderer) = self.renderer {
+                    renderer.set_scale_factor(scale_factor as f32);
+                }
+                if let Some(ref window) = self.window {
+                    window.request_redraw();
                 }
                 self.needs_draw = true;
             }
