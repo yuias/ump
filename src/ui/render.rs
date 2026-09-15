@@ -9,11 +9,11 @@ use crate::ui::border::draw_panel;
 use crate::ui::header::{
     fit_header_items, format_thousands, truncate_sf2_name, HeaderItem, HeaderItemKind,
 };
+use crate::ui::fkey_bar::render_fkey_bar;
 use crate::ui::help::render_help;
 use crate::ui::hit::{HitAction, HitMap};
 use crate::ui::layout::{dot_size, px, Layout};
 use crate::ui::piano_roll::render_piano_roll;
-use crate::ui::status_bar::render_status_bar;
 use crate::ui::text::{text_cells, text_width};
 use crate::ui::theme;
 use crate::ui::track_list::render_track_list;
@@ -85,8 +85,8 @@ fn render_player(renderer: &mut dyn Renderer, app: &mut App) {
     );
 
     // Transport and function-key hint bar
-    render_transport(renderer, layout.transport, app);
-    render_status_bar(renderer, layout.fkey_bar);
+    render_transport(renderer, layout.transport, app, &mut hits);
+    render_fkey_bar(renderer, layout.fkey_bar, app, &mut hits);
 
     // Help overlay: rendered in a separate layer so its background
     // correctly covers the base layer text (wgpu z-order fix).

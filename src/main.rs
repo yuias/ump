@@ -376,10 +376,26 @@ impl ApplicationHandler for UmpApp {
 
             WindowEvent::CursorMoved { position, .. } => {
                 self.mouse.set_cursor_pos(position.x as f32, position.y as f32);
-                if let (Some(app), Some(window)) = (&self.app, &self.window)
+                let mut changed = false;
+                if let Some(ref mut app) = self.app
                     && app.screen == AppScreen::Player
                 {
-                    self.mouse.update_hover(app, window);
+                    if let Some(ref window) = self.window {
+                        changed |= self.mouse.update_hover(app, window);
+                    }
+                    changed |= self.mouse.handle_drag(app);
+                }
+                if changed {
+                    self.mark_input_handled();
+                }
+            }
+
+            // Otherwise a hover highlight stays lit until the pointer comes back.
+            WindowEvent::CursorLeft { .. } => {
+                if let Some(ref mut app) = self.app
+                    && app.hover.take().is_some()
+                {
+                    self.mark_input_handled();
                 }
             }
 
@@ -396,6 +412,14 @@ impl ApplicationHandler for UmpApp {
                 if handled {
                     self.mark_input_handled();
                 }
+            }
+
+            WindowEvent::MouseInput {
+                state: ElementState::Released,
+                button: MouseButton::Left,
+                ..
+            } => {
+                self.mouse.end_drag();
             }
 
             WindowEvent::MouseWheel { delta, .. } => {

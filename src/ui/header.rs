@@ -5,11 +5,15 @@ use unicode_width::UnicodeWidthChar;
 use crate::renderer::types::Color;
 use crate::ui::text::text_cells;
 
+/// Formats a duration as `MM:SS.cc` (centiseconds), for the transport bar's
+/// large current-time readout and total-time display.
 pub fn format_duration(secs: f64) -> String {
-    let total = secs as u64;
-    let min = total / 60;
-    let sec = total % 60;
-    format!("{:02}:{:02}", min, sec)
+    let total_cs = (secs * 100.0).round() as u64;
+    let cs = total_cs % 100;
+    let total_sec = total_cs / 100;
+    let sec = total_sec % 60;
+    let min = total_sec / 60;
+    format!("{:02}:{:02}.{:02}", min, sec, cs)
 }
 
 /// Identifies a header metadata item, used to pick a fixed drop order when
@@ -124,6 +128,13 @@ pub fn truncate_sf2_name(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn format_duration_includes_centiseconds() {
+        assert_eq!(format_duration(0.0), "00:00.00");
+        assert_eq!(format_duration(65.5), "01:05.50");
+        assert_eq!(format_duration(3661.005), "61:01.01");
+    }
 
     #[test]
     fn fit_all_items_when_space_allows() {

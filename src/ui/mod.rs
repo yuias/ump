@@ -1,6 +1,7 @@
 pub mod bars;
 pub mod border;
 pub mod file_browser;
+pub mod fkey_bar;
 pub mod header;
 pub mod help;
 pub mod hit;
@@ -9,7 +10,6 @@ pub mod layout;
 pub mod mouse;
 pub mod piano_roll;
 pub mod render;
-pub mod status_bar;
 pub mod text;
 pub mod theme;
 pub mod track_list;

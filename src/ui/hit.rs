@@ -2,6 +2,7 @@
 //! the input layer queries them after the frame without re-deriving layout.
 
 use crate::renderer::types::Rect;
+use crate::ui::fkey_bar::FKeyAction;
 
 /// Action bound to a hit region. `usize` is the raw row index as used by
 /// `app.track_cursor` / `build_raw_rows`.
@@ -30,6 +31,27 @@ pub enum HitAction {
         px_per_tick: f64,
         vertical: bool,
     },
+    /// Transport play/pause button.
+    PlayPause,
+    /// Transport stop button.
+    Stop,
+    /// Transport seek bar: `x0`/`width` are the bar's pixel span, captured at
+    /// press/hover time so a drag keeps working even once the cursor leaves
+    /// the bar vertically.
+    SeekBar {
+        x0: f32,
+        width: f32,
+        total_ticks: u64,
+    },
+    /// Transport volume blocks: `x0` is the first block's left edge, `block_w`
+    /// and `gap` give the per-block stride for locating the block under the cursor.
+    Volume {
+        x0: f32,
+        block_w: f32,
+        gap: f32,
+    },
+    /// A function-key bar slot.
+    FKey(FKeyAction),
 }
 
 pub struct HitRegion {

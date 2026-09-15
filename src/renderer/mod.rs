@@ -59,6 +59,10 @@ pub trait Renderer {
     /// Get the cell size in pixels (width, height).
     fn cell_size(&self) -> (f32, f32);
 
+    /// Pixel font size that `cell_size` was measured at. `draw_text` sizes are
+    /// font sizes, not line heights, so scale text widths by `size / font_size()`.
+    fn font_size(&self) -> f32;
+
     /// Get the window/surface size in pixels (width, height).
     fn window_size(&self) -> (u32, u32);
 

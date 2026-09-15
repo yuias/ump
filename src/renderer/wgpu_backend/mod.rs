@@ -390,6 +390,10 @@ impl Renderer for WgpuRenderer {
         (self.text.cell_width, self.text.cell_height)
     }
 
+    fn font_size(&self) -> f32 {
+        self.text.default_font_size
+    }
+
     fn window_size(&self) -> (u32, u32) {
         (self.width, self.height)
     }

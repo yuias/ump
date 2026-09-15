@@ -40,7 +40,7 @@ pub struct GlyphonTextRenderer {
     buffer_cache: HashMap<TextCacheKey, Buffer>,
 
     custom_family: Option<String>,
-    default_font_size: f32,
+    pub(crate) default_font_size: f32,
     pub cell_width: f32,
     pub cell_height: f32,
     width: u32,

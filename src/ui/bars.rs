@@ -104,13 +104,11 @@ impl BarMap {
     }
 
     /// Index of the last segment whose `bar_at_start <= bar`. `bar` must be >= 1.
-    #[allow(dead_code)] // used by tick_of_bar, kept for the bar->tick half of the public API
     fn segment_idx_for_bar(&self, bar: u32) -> usize {
         self.segments.partition_point(|s| s.bar_at_start <= bar).saturating_sub(1)
     }
 
     /// 1-based (bar, beat) at `tick`.
-    #[allow(dead_code)] // public tick->bar API; no UI element reads it yet
     pub fn bar_at(&self, tick: u64) -> (u32, u32) {
         let seg = &self.segments[self.segment_idx_for_tick(tick)];
         let delta = tick - seg.start_tick;
@@ -120,7 +118,6 @@ impl BarMap {
     }
 
     /// Tick at the start of 1-based bar `bar`.
-    #[allow(dead_code)] // public bar->tick API; no UI element reads it yet
     pub fn tick_of_bar(&self, bar: u32) -> u64 {
         let seg = &self.segments[self.segment_idx_for_bar(bar)];
         seg.start_tick + (bar - seg.bar_at_start) as u64 * seg.ticks_per_bar

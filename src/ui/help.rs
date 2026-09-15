@@ -10,8 +10,8 @@ use crate::ui::theme;
 const BINDINGS: &[(&str, &str)] = &[
     ("Space", "Play / Pause"),
     ("S", "Stop"),
-    ("\u{2190} / \u{2192}", "Seek -5s / +5s"),
-    ("\u{2191} / \u{2193}", "Cursor Up / Down"),
+    ("Left / Right", "Seek -5s / +5s"),
+    ("Up / Down", "Cursor Up / Down"),
     ("M", "Mute / Unmute track"),
     ("V", "Toggle piano roll orientation"),
     ("Shift+V", "Toggle vertical flow (falling / rising)"),

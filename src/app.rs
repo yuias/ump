@@ -17,7 +17,7 @@ use crate::synth::audio::AudioOutput;
 use ump_playback::synth::engine::SynthPool;
 use crate::ui::bars::BarMap;
 use crate::ui::file_browser::FileBrowser;
-use crate::ui::hit::HitMap;
+use crate::ui::hit::{HitAction, HitMap};
 use crate::ui::track_list::raw_row_count;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -131,6 +131,9 @@ pub struct App {
 
     // Mouse hit-region map, populated each frame by the player screen.
     pub hit_map: HitMap,
+    /// Action currently under the cursor, updated on `CursorMoved`. Drawn as
+    /// hover styling by `transport.rs` / `fkey_bar.rs`.
+    pub hover: Option<HitAction>,
 
     // Level meters
     /// Smoothed per-flat-channel level (0.0-1.0), decays when no note is active.
@@ -207,6 +210,7 @@ impl App {
             load_time: Instant::now(),
             config,
             hit_map: HitMap::default(),
+            hover: None,
             channel_levels: [0.0; 64],
             last_level_update: Instant::now(),
         }
@@ -270,6 +274,7 @@ impl App {
             load_time: Instant::now(),
             config,
             hit_map: HitMap::default(),
+            hover: None,
             channel_levels: [0.0; 64],
             last_level_update: Instant::now(),
         }
@@ -566,6 +571,11 @@ impl App {
     /// Seek to an absolute tick (e.g. a piano-roll ruler click), clamped to the song's length.
     pub fn seek_to_tick(&self, tick: u64) {
         self.shared.request_seek(tick.min(self.total_ticks));
+    }
+
+    /// Set the volume directly (e.g. from a clicked volume block), clamped 0-100.
+    pub fn set_volume(&self, v: u32) {
+        self.shared.volume.store(v.min(100), Ordering::Relaxed);
     }
 
     pub fn volume_up(&self) {

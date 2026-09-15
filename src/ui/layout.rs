@@ -74,7 +74,8 @@ impl Layout {
         let header_h = cell_h + 2.0 * px(4.0, scale);
         let header_y = gutter;
 
-        let transport_h = cell_h + 2.0 * px(8.0, scale);
+        // Tall enough for the large current-time readout (font size ~1.6*cell_h).
+        let transport_h = (cell_h * 1.6).round() + 2.0 * px(6.0, scale);
         let fkey_h = cell_h + 2.0 * px(3.0, scale);
 
         let fkey_y = window_h - gutter - fkey_h;
@@ -166,5 +167,23 @@ mod tests {
     #[test]
     fn layout_2560x1440_scale_2_cell_16x32() {
         check_layout(2560.0, 1440.0, 16.0, 32.0, 2.0);
+    }
+
+    #[test]
+    fn transport_height_matches_formula() {
+        let cell_h = 16.0;
+        let scale = 1.0;
+        let l = Layout::compute(1280.0, 720.0, 8.0, cell_h, scale);
+        let expected = (cell_h * 1.6).round() + 2.0 * px(6.0, scale);
+        assert_eq!(l.transport.height, expected);
+    }
+
+    #[test]
+    fn transport_height_matches_formula_scaled() {
+        let cell_h = 32.0;
+        let scale = 2.0;
+        let l = Layout::compute(2560.0, 1440.0, 16.0, cell_h, scale);
+        let expected = (cell_h * 1.6).round() + 2.0 * px(6.0, scale);
+        assert_eq!(l.transport.height, expected);
     }
 }
