@@ -151,7 +151,21 @@ impl GlyphonTextRenderer {
             height = run.line_height;
         }
 
-        (width, height)
+        // Snap to whole physical pixels: rect edges and dot fonts are pixel-snapped
+        // elsewhere, and fractional cells would make columns drift.
+        (width.round(), height.round())
+    }
+
+    /// Re-measure glyph metrics at a new physical px size and drop cached glyph
+    /// buffers shaped at the old size (they become dead weight, not incorrect —
+    /// buffers are keyed by their own size, so stale entries are just never reused).
+    pub fn set_font_size(&mut self, px: f32) {
+        let (cell_width, cell_height) =
+            Self::measure_cell(&mut self.font_system, px, self.custom_family.as_deref());
+        self.default_font_size = px;
+        self.cell_width = cell_width;
+        self.cell_height = cell_height;
+        self.buffer_cache.clear();
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {

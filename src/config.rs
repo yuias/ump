@@ -25,6 +25,8 @@ pub struct Config {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct FontConfig {
     pub path: Option<String>,
+    /// Font size in logical px. Multiplied by the display's scale factor to
+    /// get the physical px size actually rendered.
     pub size: Option<f32>,
 }
 

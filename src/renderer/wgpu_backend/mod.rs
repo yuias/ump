@@ -35,6 +35,8 @@ pub struct WgpuRenderer {
     height: u32,
     clear_color: Color,
     scale_factor: f32,
+    /// Font size in logical px, as configured. Physical px = this * `scale_factor`.
+    logical_font_size: f32,
 
     /// Split point for overlay layer (rect index, text index).
     /// When set, end_frame renders base then overlay in separate passes.
@@ -104,7 +106,14 @@ impl WgpuRenderer {
         surface.configure(&device, &surface_config);
 
         let rect_pipeline = RectPipeline::new(&device, surface_format, width, height);
-        let text = GlyphonTextRenderer::new(&device, &queue, surface_format, font_path, font_size)?;
+        // `font_size` is logical px; the text renderer shapes glyphs in physical px.
+        let text = GlyphonTextRenderer::new(
+            &device,
+            &queue,
+            surface_format,
+            font_path,
+            font_size * scale_factor,
+        )?;
 
         // Pre-allocate persistent instance buffer
         let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -128,13 +137,16 @@ impl WgpuRenderer {
             height,
             clear_color: Color::rgb(0, 0, 0),
             scale_factor,
+            logical_font_size: font_size,
             overlay_split: None,
         })
     }
 
     /// Update the window scale factor (called on `ScaleFactorChanged`).
+    /// Re-measures glyph metrics so text stays at `logical_font_size` on screen.
     pub fn set_scale_factor(&mut self, scale_factor: f32) {
         self.scale_factor = scale_factor;
+        self.text.set_font_size(self.logical_font_size * scale_factor);
     }
 }
 

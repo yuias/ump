@@ -27,10 +27,11 @@ volume = 80
 
 [font]
 # Custom font file (.ttf / .otf / .ttc)
-# Falls back to Consolas if not set or loading fails.
+# If not set or loading fails, falls back to the system default sans-serif font
+# (not a fixed-width font — text metrics assume a custom monospace font here).
 # path = "C:/Windows/Fonts/msgothic.ttc"
 
-# Font size in points
+# Font size in logical pixels (scaled by the display's DPI scale factor).
 size = 14.0
 
 [window]
