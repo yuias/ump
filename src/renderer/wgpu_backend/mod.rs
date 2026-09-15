@@ -80,7 +80,7 @@ impl WgpuRenderer {
 
         let surface_caps = surface.get_capabilities(&adapter);
         // Prefer non-sRGB format to avoid double gamma correction
-        // (our Color values are already in sRGB space, matching D2D behavior)
+        // (our Color values are already in sRGB space)
         let surface_format = surface_caps
             .formats
             .iter()

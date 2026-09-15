@@ -29,11 +29,6 @@ pub struct FontConfig {
 }
 
 impl FontConfig {
-    #[cfg(feature = "d2d")]
-    pub fn family(&self) -> &str {
-        "Consolas"
-    }
-
     pub fn size_or_default(&self) -> f32 {
         self.size.unwrap_or(14.0)
     }

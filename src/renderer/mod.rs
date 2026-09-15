@@ -1,8 +1,5 @@
 //! Renderer trait abstraction and supporting types.
 
-#[cfg(feature = "d2d")]
-pub mod d2d;
-
 #[cfg(feature = "wgpu-backend")]
 pub mod wgpu_backend;
 
@@ -32,7 +29,7 @@ impl std::error::Error for RenderError {}
 
 pub type RenderResult<T> = Result<T, RenderError>;
 
-/// Abstract renderer interface. Implementations: D2DRenderer (Windows), WgpuRenderer (cross-platform).
+/// Abstract renderer interface. Implementation: WgpuRenderer (cross-platform).
 pub trait Renderer {
     /// Resize the render target.
     fn resize(&mut self, width: u32, height: u32) -> RenderResult<()>;
@@ -69,6 +66,6 @@ pub trait Renderer {
 
     /// Begin an overlay layer. Subsequent draw calls belong to the overlay,
     /// which is rendered on top of all previous content (including text).
-    /// Default is a no-op (correct for immediate-mode backends like D2D).
+    /// Default is a no-op (correct for immediate-mode backends).
     fn begin_overlay(&mut self) {}
 }

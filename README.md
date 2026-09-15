@@ -2,7 +2,7 @@
 
 A native GUI MIDI player with SF2 soundfont synthesis.
 
-Built with Rust, using hardware-accelerated rendering (Direct2D or wgpu) and a custom sequencer for low-latency audio playback.
+Built with Rust, using hardware-accelerated rendering (wgpu) and a custom sequencer for low-latency audio playback.
 
 ## Features
 
@@ -44,25 +44,16 @@ Built with Rust, using hardware-accelerated rendering (Direct2D or wgpu) and a c
 
 ### Rendering Backend
 
-Two rendering backends are available, selected at compile time via Cargo feature flags:
-
-| Feature | Backend | Platform | Default |
-|---|---|---|---|
-| `wgpu-backend` | wgpu + glyphon | Cross-platform (Metal / DX12 / Vulkan) | Yes |
-| `d2d` | Direct2D / DirectWrite | Windows only | -- |
+Rendering uses wgpu + glyphon, enabled via the `wgpu-backend` Cargo feature (on by default):
 
 ```sh
-# Default (wgpu) -- works on macOS, Windows, and Linux
+# Works on macOS, Windows, and Linux
 cargo build --release
-
-# Windows only (D2D)
-cargo build --release --no-default-features --features d2d
 ```
 
 ### Requirements
 
 - Rust 1.70+ (edition 2021)
-- **D2D backend:** Windows 10 or later
 - **wgpu backend:** Vulkan, Metal, or DX12 capable GPU
 
 ### Usage
@@ -107,7 +98,6 @@ When a MIDI mode is detected or manually selected, the matching bundle is loaded
 
 ## Limitations
 
-- **D2D backend is Windows-only** -- The D2D (Direct2D) backend requires `--no-default-features --features d2d` and only builds on Windows.
 - **SysEx support is partial** -- GM/GS/XG/GM2 reset, Master Volume, master tune, scale tuning, and GS drum map changes are processed. Other SysEx commands (e.g. GS part parameters, XG effect settings) are parsed but not fully reproduced.
 - **SF2 modulators are partial** -- SF2 Default Modulators (Phase 1) are implemented. Custom per-preset modulators from `pmod`/`imod` chunks are not yet parsed.
 - **No MIDI output** -- Playback is software-synthesized only. External MIDI device output is not supported.
@@ -121,7 +111,6 @@ When a MIDI mode is detected or manually selected, the matching bundle is loaded
 | [rustysynth](https://github.com/yuiAs/rustysynth) | SF2 soundfont synthesizer (fork with SysEx, mute, effect control, cubic interpolation, FDN reverb, SVF filter, and more) |
 | [cpal](https://crates.io/crates/cpal) | Cross-platform audio output |
 | [winit](https://crates.io/crates/winit) | Window creation and event loop |
-| [windows](https://crates.io/crates/windows) | Direct2D / DirectWrite rendering (d2d feature) |
 | [wgpu](https://crates.io/crates/wgpu) | Cross-platform GPU rendering (wgpu-backend feature) |
 | [glyphon](https://crates.io/crates/glyphon) | Text rendering for wgpu (wgpu-backend feature) |
 | [clap](https://crates.io/crates/clap) | Command-line argument parsing |

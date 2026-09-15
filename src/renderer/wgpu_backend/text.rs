@@ -176,8 +176,8 @@ impl GlyphonTextRenderer {
         if text.is_empty() {
             return;
         }
-        // Snap to default_font_size when size ≈ cell_height (matches D2D behavior
-        // where format_regular at original font_size is used for standard text).
+        // Snap to default_font_size when size ≈ cell_height, so standard text
+        // is always shaped at the font's original size rather than a scaled one.
         let effective_size = if (size - self.cell_height).abs() < 1.0 {
             self.default_font_size
         } else {
