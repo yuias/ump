@@ -806,9 +806,14 @@ impl App {
 
 /// Compute the new mute mask for soloing flat channel `flat` among `used`
 /// channels: mute every other used channel, unless `flat` is already the
-/// sole unmuted used channel, in which case clear all mutes.
+/// sole unmuted used channel, in which case clear all mutes. Soloing a
+/// channel that isn't in `used` (e.g. an empty track row) leaves `muted`
+/// unchanged instead of muting every used channel.
 fn solo_mask(used: u64, muted: u64, flat: u64) -> u64 {
     let bit = 1u64 << flat;
+    if used & bit == 0 {
+        return muted;
+    }
     let others = used & !bit;
     let already_soloed = muted & others == others && muted & bit == 0;
     if already_soloed {
@@ -897,6 +902,14 @@ mod tests {
         let used = 0b0011; // channels 0, 1
         let muted = 0b0100; // channel 2 muted but not "used"
         assert_eq!(solo_mask(used, muted, 0), 0b0010);
+    }
+
+    #[test]
+    fn solo_mask_on_unused_channel_leaves_mute_state_unchanged() {
+        let used = 0b1011; // channels 0, 1, 3
+        let muted = 0b0010; // channel 1 already muted
+        // Channel 2 isn't used: soloing it must not touch any mute state.
+        assert_eq!(solo_mask(used, muted, 2), muted);
     }
 
     #[test]
