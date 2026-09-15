@@ -309,10 +309,10 @@ fn render_horizontal(
         }
 
         if key % 12 == 0 && slot_h >= ch * 0.6 {
-            let font_size = ch.min(slot_h * 1.2);
+            let font_size = renderer.font_size().min(slot_h);
             let (note_str, octave) = key_name_parts(key);
             let label = format!("{}{}", note_str, octave);
-            let label_w = text_width(&label, cw) * (font_size / ch);
+            let label_w = text_width(&label, cw) * (font_size / renderer.font_size());
             let label_x = kb_area.right() - px(2.0, scale) - label_w;
             let label_y = row.y + (slot_h - font_size) / 2.0;
             renderer.draw_text(label_x, label_y, &label, theme::GROUND, font_size);
@@ -577,10 +577,10 @@ fn render_vertical(
         }
 
         if key % 12 == 0 && slot_w >= label_min_slot {
-            let font_size = ch.min(slot_w * 1.2);
+            let font_size = renderer.font_size().min(slot_w * 1.2);
             let (note_str, octave) = key_name_parts(key);
             let label = format!("{}{}", note_str, octave);
-            let label_w = text_width(&label, cw) * (font_size / ch);
+            let label_w = text_width(&label, cw) * (font_size / renderer.font_size());
             let label_x = col.x + (slot_w - label_w) / 2.0;
             let label_y = match flow {
                 VerticalFlow::Down => kb_area.bottom() - px(2.0, scale) - font_size,
