@@ -7,7 +7,32 @@ use super::event::{MidiData, MidiEvent, NoteRect, TimedMidiEvent, TrackInfo};
 use super::tempo_map::TempoMap;
 use super::text::decode_meta_text;
 
+/// Extract the SMF payload from an RMID container (`RIFF....RMID` with the
+/// file in a `data` chunk), as produced by Windows MIDI tooling. Returns
+/// `None` when `bytes` is not an RMID file, leaving a plain SMF untouched.
+fn unwrap_rmid(bytes: &[u8]) -> Option<&[u8]> {
+    if bytes.len() < 12 || &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"RMID" {
+        return None;
+    }
+    // The RIFF size field is unreliable in files found in the wild, so walk to
+    // the end of the buffer instead of trusting it.
+    let mut offset = 12;
+    while offset + 8 <= bytes.len() {
+        let id = &bytes[offset..offset + 4];
+        let size = u32::from_le_bytes(bytes[offset + 4..offset + 8].try_into().ok()?) as usize;
+        let start = offset + 8;
+        let end = start.checked_add(size)?.min(bytes.len());
+        if id == b"data" {
+            return Some(&bytes[start..end]);
+        }
+        // Chunks are padded to an even length.
+        offset = start + size + (size & 1);
+    }
+    None
+}
+
 pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
+    let bytes = unwrap_rmid(bytes).unwrap_or(bytes);
     let smf = Smf::parse(bytes).context("Failed to parse MIDI file")?;
 
     let ticks_per_quarter = match smf.header.timing {
@@ -344,10 +369,51 @@ mod tests {
         smf
     }
 
+    fn wrap_rmid(smf: &[u8], pad_to_even: bool) -> Vec<u8> {
+        let mut data = smf.to_vec();
+        if pad_to_even && data.len() % 2 == 1 {
+            data.push(0);
+        }
+        let mut out = Vec::new();
+        out.extend_from_slice(b"RIFF");
+        out.extend_from_slice(&((4 + 8 + data.len()) as u32).to_le_bytes());
+        out.extend_from_slice(b"RMID");
+        out.extend_from_slice(b"data");
+        out.extend_from_slice(&(smf.len() as u32).to_le_bytes());
+        out.extend_from_slice(&data);
+        out
+    }
+
     #[test]
     fn parses_plain_smf() {
         let (data, _) = parse_midi(&minimal_smf()).unwrap();
         assert_eq!(data.format, 0);
+        assert_eq!(data.note_rects.len(), 1);
+    }
+
+    #[test]
+    fn parses_rmid_container() {
+        let (data, _) = parse_midi(&wrap_rmid(&minimal_smf(), true)).unwrap();
+        assert_eq!(data.format, 0);
+        assert_eq!(data.note_rects.len(), 1);
+    }
+
+    #[test]
+    fn skips_chunks_before_data() {
+        let smf = minimal_smf();
+        let mut rmid = Vec::new();
+        rmid.extend_from_slice(b"RIFF");
+        rmid.extend_from_slice(&0u32.to_le_bytes()); // deliberately wrong
+        rmid.extend_from_slice(b"RMID");
+        // An odd-length INFO chunk, so the padding byte has to be skipped too.
+        rmid.extend_from_slice(b"INFO");
+        rmid.extend_from_slice(&3u32.to_le_bytes());
+        rmid.extend_from_slice(&[1, 2, 3, 0]);
+        rmid.extend_from_slice(b"data");
+        rmid.extend_from_slice(&(smf.len() as u32).to_le_bytes());
+        rmid.extend_from_slice(&smf);
+
+        let (data, _) = parse_midi(&rmid).unwrap();
         assert_eq!(data.note_rects.len(), 1);
     }
 
