@@ -1,5 +1,5 @@
 # ump settings
-# Place this file at: %APPDATA%/ump/settings.toml
+# Place this file at: %LOCALAPPDATA%/ump/settings.toml
 # Relative paths are resolved against the config directory.
 
 [soundfont]

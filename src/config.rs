@@ -79,10 +79,10 @@ pub use ump_playback::synth::bundle::{SoundfontBundle, SoundfontConfig};
 
 impl Config {
     /// Return the path to the config file.
-    /// Windows: %APPDATA%/ump/settings.toml
+    /// Windows: %LOCALAPPDATA%/ump/settings.toml
     /// Linux/macOS: ~/.config/ump/settings.toml
     pub fn config_path() -> Option<PathBuf> {
-        dirs::config_dir().map(|d| d.join("ump").join("settings.toml"))
+        dirs::config_local_dir().map(|d| d.join("ump").join("settings.toml"))
     }
 
     /// Load config from disk. Returns default if file does not exist or parse fails.
@@ -138,11 +138,11 @@ impl Config {
     /// Directory that holds user-installed fonts (not bundled with the app).
     /// Kept next to settings.toml so a relative `font.path` like `fonts/x.ttf`
     /// and auto-detection look in the same place.
-    /// Windows: %APPDATA%/ump/fonts
+    /// Windows: %LOCALAPPDATA%/ump/fonts
     /// Linux:   ~/.config/ump/fonts
     /// macOS:   ~/Library/Application Support/ump/fonts
     pub fn fonts_dir() -> Option<PathBuf> {
-        dirs::config_dir().map(|d| d.join("ump").join("fonts"))
+        dirs::config_local_dir().map(|d| d.join("ump").join("fonts"))
     }
 
     /// Resolve the font to load and its size, in priority order:

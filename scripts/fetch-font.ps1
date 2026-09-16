@@ -5,12 +5,12 @@
     not bundle fonts; it auto-detects this file there when [font].path is
     unset in settings.toml (see README.md's Fonts section).
 .PARAMETER Dest
-    Target font directory. Defaults to %APPDATA%\ump\fonts, next to
+    Target font directory. Defaults to %LOCALAPPDATA%\ump\fonts, next to
     settings.toml (matches Config::fonts_dir() in src/config.rs). Override for
     testing.
 #>
 param(
-    [string]$Dest = (Join-Path $env:APPDATA 'ump\fonts')
+    [string]$Dest = (Join-Path $env:LOCALAPPDATA 'ump\fonts')
 )
 
 Set-StrictMode -Version 2

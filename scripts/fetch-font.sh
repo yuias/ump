@@ -10,7 +10,7 @@ TTF_SHA256="3ad9af88726d42b40f7f365f0dcac785af73cf20ea6f1d5b44e57cc21150b8f1"
 TTF_URL="https://raw.githubusercontent.com/google/fonts/${COMMIT_SHA}/ofl/dotgothic16/DotGothic16-Regular.ttf"
 OFL_URL="https://raw.githubusercontent.com/google/fonts/${COMMIT_SHA}/ofl/dotgothic16/OFL.txt"
 
-# Next to settings.toml; matches Config::fonts_dir() (dirs::config_dir()) in src/config.rs.
+# Next to settings.toml; matches Config::fonts_dir() (dirs::config_local_dir()) in src/config.rs.
 if [ -n "${UMP_FONT_DIR:-}" ]; then
     dest="$UMP_FONT_DIR"
 elif [ "$(uname)" = "Darwin" ]; then

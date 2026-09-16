@@ -87,7 +87,7 @@ Both scripts download the font into ump's font directory and verify it against a
 
 | Platform | Font directory |
 |---|---|
-| Windows | `%APPDATA%\ump\fonts` |
+| Windows | `%LOCALAPPDATA%\ump\fonts` |
 | Linux | `~/.config/ump/fonts` |
 | macOS | `~/Library/Application Support/ump/fonts` |
 
@@ -114,7 +114,7 @@ Settings are stored at the platform config directory. See [settings.example.toml
 
 | Platform | Path |
 |---|---|
-| Windows | `%APPDATA%/ump/settings.toml` |
+| Windows | `%LOCALAPPDATA%/ump/settings.toml` |
 | Linux | `~/.config/ump/settings.toml` |
 | macOS | `~/Library/Application Support/ump/settings.toml` |
 
