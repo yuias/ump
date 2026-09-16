@@ -379,38 +379,26 @@ impl App {
 
     /// Reload synth from a SoundfontBundle (multiple SF2 files with routing).
     pub fn reload_bundle(&mut self, bundle: &crate::config::SoundfontBundle) -> Result<()> {
-        // Load all SF2 files
+        let config_dir = crate::config::Config::config_path();
+        let base_dir = config_dir.as_deref().and_then(|p| p.parent());
+
         let mut sf2_data_list: Vec<Vec<u8>> = Vec::new();
         let mut names = Vec::new();
-        for file_path in &bundle.files {
-            let resolved = crate::config::resolve_path(file_path);
-            let bytes = std::fs::read(&resolved)
-                .with_context(|| format!("Failed to read SF2 file: {}", resolved))?;
-            log_info!("SF2 bundle: file={}, size={} bytes", resolved, bytes.len());
-            let name = std::path::Path::new(&resolved)
+        for path in bundle.resolved_files(base_dir) {
+            let bytes = std::fs::read(&path)
+                .with_context(|| format!("Failed to read SF2 file: {}", path.display()))?;
+            log_info!("SF2 bundle: file={}, size={} bytes", path.display(), bytes.len());
+            let name = path
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| resolved.clone());
+                .unwrap_or_else(|| path.to_string_lossy().to_string());
             names.push(name);
             sf2_data_list.push(bytes);
         }
 
-        // Build routing table
-        let mut routing = [0usize; 16];
-        if let Some(ref route_vec) = bundle.routing {
-            for (ch, &idx) in route_vec.iter().enumerate() {
-                if ch < 16 && (idx as usize) < sf2_data_list.len() {
-                    routing[ch] = idx as usize;
-                }
-            }
-        }
-
+        let routing = bundle.routing_table();
         let refs: Vec<&[u8]> = sf2_data_list.iter().map(|v| v.as_slice()).collect();
-        let new_pool = if self.port_count > 1 {
-            SynthPool::new_bundle(&refs, routing, self.sample_rate, self.port_count)?
-        } else {
-            SynthPool::new(&refs, routing, self.sample_rate)?
-        };
+        let new_pool = SynthPool::new_bundle(&refs, routing, self.sample_rate, self.port_count)?;
 
         {
             let mut syn = self.synth.lock().unwrap();

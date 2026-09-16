@@ -15,6 +15,7 @@ encoding_rs = "0.8"
 log = "0.4"
 midly = "0.5"
 rustysynth = { git = "https://github.com/yuiAs/rustysynth", branch = "develop" }
+serde = { version = "1", features = ["derive"] }
 
 [features]
 default = ["wgpu-backend"]
@@ -22,7 +23,7 @@ d2d = ["dep:windows", "dep:windows-numerics"]
 wgpu-backend = ["dep:wgpu", "dep:glyphon", "dep:bytemuck", "dep:pollster"]
 
 [dependencies]
-ump-playback = { path = "crates/ump-playback" }
+ump-playback = { path = "crates/ump-playback", features = ["serde"] }
 log = { workspace = true }
 cpal = "0.18"
 winit = "0.30"
@@ -46,7 +47,7 @@ clap = { version = "4", features = ["derive"] }
 anyhow = { workspace = true }
 dirs = "7"
 toml = "1"
-serde = { version = "1", features = ["derive"] }
+serde = { workspace = true }
 unicode-width = "0.2"
 
 [profile.release]

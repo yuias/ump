@@ -1,6 +1,5 @@
 //! Settings persistence via settings.toml.
 
-use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
@@ -73,29 +72,9 @@ pub struct DebugConfig {
     pub verbose: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct SoundfontConfig {
-    pub default_path: Option<String>,
-    pub recent_path: Option<String>,
-    /// Mode-specific soundfont bundles (keys: "GM", "GS", "XG", "GM2").
-    pub bundles: Option<HashMap<String, SoundfontBundle>>,
-}
-
-/// A bundle of SF2 files with per-channel routing.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SoundfontBundle {
-    /// SF2 file paths (resolved relative to config directory).
-    pub files: Vec<String>,
-    /// Per-channel routing: ch0-15 → index into `files`. Default: all 0.
-    pub routing: Option<Vec<u8>>,
-}
-
-impl SoundfontConfig {
-    /// Look up the bundle for a given MIDI mode (e.g. "GM", "GS", "XG", "GM2").
-    pub fn resolve_bundle(&self, mode: &str) -> Option<&SoundfontBundle> {
-        self.bundles.as_ref()?.get(mode)
-    }
-}
+// The soundfont bundle shape lives in ump-playback so that the foobar2000
+// component reads the same settings.toml.
+pub use ump_playback::synth::bundle::{SoundfontBundle, SoundfontConfig};
 
 impl Config {
     /// Return the path to the config file.

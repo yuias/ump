@@ -14,3 +14,8 @@ encoding_rs = { workspace = true }
 log = { workspace = true }
 midly = { workspace = true }
 rustysynth = { workspace = true }
+serde = { workspace = true, optional = true }
+
+[features]
+# Deserialize the SoundFont bundle configuration from a settings file.
+serde = ["dep:serde"]
