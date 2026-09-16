@@ -11,12 +11,16 @@ struct Uniforms {
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) color: vec4<f32>,
+    @location(1) bg: vec4<f32>,
+    @location(2) params: vec4<f32>,
 }
 
 // Instance attributes
 struct InstanceInput {
     @location(0) rect: vec4<f32>,   // x, y, width, height (pixels)
     @location(1) color: vec4<f32>,  // r, g, b, a (0.0-1.0)
+    @location(2) bg: vec4<f32>,     // off-dot color for checker pattern (a=0 => transparent)
+    @location(3) params: vec4<f32>, // x: pattern (0=solid, 1=checker), y: dot size (physical px)
 }
 
 @vertex
@@ -42,10 +46,24 @@ fn vs_main(
     var out: VertexOutput;
     out.position = vec4<f32>(ndc, 0.0, 1.0);
     out.color = instance.color;
+    out.bg = instance.bg;
+    out.params = instance.params;
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return in.color;
+    if (in.params.x < 0.5) {
+        return in.color;
+    }
+
+    // Screen-aligned checker: cell index from framebuffer coords, not the
+    // rect origin, so adjacent/overlapping dithered rects tile seamlessly.
+    let dot = max(in.params.y, 1.0);
+    let cell = floor(in.position.xy / dot);
+    let parity = (cell.x + cell.y) % 2.0;
+    if (parity < 0.5) {
+        return in.color;
+    }
+    return in.bg;
 }

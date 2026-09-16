@@ -13,7 +13,7 @@ impl Color {
         Color { r, g, b }
     }
 
-    /// Convert to f32 tuple (0.0..1.0) for D2D.
+    /// Convert to f32 tuple (0.0..1.0) for GPU color values.
     pub fn to_f32(self) -> (f32, f32, f32) {
         (
             self.r as f32 / 255.0,
@@ -45,6 +45,3 @@ impl Rect {
         self.y + self.height
     }
 }
-
-/// Background color constant.
-pub const BG_COLOR: Color = Color::rgb(20, 20, 30);

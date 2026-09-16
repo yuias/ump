@@ -1,7 +1,7 @@
 #![windows_subsystem = "windows"]
 
-#[cfg(not(any(feature = "d2d", feature = "wgpu-backend")))]
-compile_error!("Either feature \"d2d\" or \"wgpu-backend\" must be enabled");
+#[cfg(not(feature = "wgpu-backend"))]
+compile_error!("Feature \"wgpu-backend\" must be enabled");
 
 #[macro_use]
 mod debug;
@@ -19,40 +19,35 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use clap::Parser;
 use winit::application::ApplicationHandler;
-use winit::event::{StartCause, WindowEvent};
+use winit::event::{ElementState, MouseButton, StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::ModifiersState;
-#[cfg(feature = "d2d")]
-use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::{Window, WindowId};
 
 use crate::app::{App, AppScreen};
 use crate::cli::Args;
 use crate::config::Config;
 use ump_playback::midi::parser::parse_midi;
-#[cfg(feature = "d2d")]
-use crate::renderer::d2d::D2DRenderer;
 #[cfg(feature = "wgpu-backend")]
 use crate::renderer::wgpu_backend::WgpuRenderer;
-use crate::renderer::types::BG_COLOR;
 use crate::renderer::Renderer;
+use crate::ui::layout::{px, ROW_HEIGHT};
+use crate::ui::theme;
 use ump_playback::sequencer::Sequencer;
 use crate::state::{SharedState, TrackInfoSnapshot};
 use crate::synth::audio::{query_sample_rate, AudioOutput};
 use ump_playback::synth::engine::SynthPool;
 use crate::ui::file_browser::{BrowseTarget, FileBrowser};
 use crate::ui::input::{handle_winit_input, InputResult};
+use crate::ui::mouse::MouseState;
 use crate::ui::render::render;
 
 /// Frame intervals by state.
 const FRAME_PIANO_ROLL: Duration = Duration::from_millis(16); // ~60fps
-const FRAME_NO_PIANO_ROLL: Duration = Duration::from_millis(100);
 const FRAME_IDLE: Duration = Duration::from_millis(200);
 
 struct UmpApp {
     window: Option<Arc<Window>>,
-    #[cfg(feature = "d2d")]
-    renderer: Option<D2DRenderer>,
     #[cfg(feature = "wgpu-backend")]
     renderer: Option<WgpuRenderer>,
     app: Option<App>,
@@ -63,6 +58,7 @@ struct UmpApp {
     needs_draw: bool,
     initialized: bool,
     modifiers: ModifiersState,
+    mouse: MouseState,
 }
 
 impl UmpApp {
@@ -78,18 +74,35 @@ impl UmpApp {
             needs_draw: true,
             initialized: false,
             modifiers: ModifiersState::default(),
+            mouse: MouseState::default(),
+        }
+    }
+
+    /// Redraw immediately after a handled mouse action, mirroring the
+    /// keyboard path's `InputResult::Handled` behavior (including the
+    /// window title update on returning to the player, e.g. after a
+    /// double-click or OPEN-button file selection).
+    fn mark_input_handled(&mut self) {
+        if let Some(ref window) = self.window {
+            window.request_redraw();
+            self.last_draw = Instant::now();
+            self.needs_draw = false;
+            if let Some(ref app) = self.app
+                && app.screen == AppScreen::Player
+                && !app.file_name.is_empty()
+            {
+                window.set_title(&format!("ump - {}", app.file_name));
+            }
         }
     }
 
     fn frame_interval(&self) -> Duration {
         match &self.app {
             Some(app) => {
-                if !app.is_playing() {
-                    FRAME_IDLE
-                } else if app.right_panel_mode == crate::app::RightPanelMode::PianoRoll {
+                if app.is_playing() {
                     FRAME_PIANO_ROLL
                 } else {
-                    FRAME_NO_PIANO_ROLL
+                    FRAME_IDLE
                 }
             }
             None => FRAME_IDLE,
@@ -265,43 +278,18 @@ impl ApplicationHandler for UmpApp {
         };
 
         let size = window.inner_size();
-        let font_path = self.config.font.path.as_deref().map(crate::config::resolve_path);
-        let font_size = self.config.font.size_or_default();
-
-        #[cfg(feature = "d2d")]
-        {
-            let font_family = self.config.font.family();
-            let hwnd = match window.window_handle() {
-                Ok(handle) => match handle.as_raw() {
-                    RawWindowHandle::Win32(h) => {
-                        windows::Win32::Foundation::HWND(h.hwnd.get() as *mut _)
-                    }
-                    _ => {
-                        log_error!("Unsupported window handle");
-                        event_loop.exit();
-                        return;
-                    }
-                },
-                Err(e) => {
-                    log_error!("Failed to get window handle: {}", e);
-                    event_loop.exit();
-                    return;
-                }
-            };
-
-            match D2DRenderer::new(hwnd, size.width, size.height, font_path.as_deref(), font_family, font_size) {
-                Ok(renderer) => self.renderer = Some(renderer),
-                Err(e) => {
-                    log_error!("Failed to create D2D renderer: {}", e);
-                    event_loop.exit();
-                    return;
-                }
-            }
-        }
+        let (font_path, font_size) = self.config.resolve_font();
 
         #[cfg(feature = "wgpu-backend")]
         {
-            match WgpuRenderer::new(window.clone(), size.width, size.height, font_path.as_deref(), font_size) {
+            match WgpuRenderer::new(
+                window.clone(),
+                size.width,
+                size.height,
+                font_path.as_deref(),
+                font_size,
+                window.scale_factor() as f32,
+            ) {
                 Ok(renderer) => self.renderer = Some(renderer),
                 Err(e) => {
                     log_error!("Failed to create wgpu renderer: {}", e);
@@ -345,6 +333,16 @@ impl ApplicationHandler for UmpApp {
                 self.needs_draw = true;
             }
 
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                if let Some(ref mut renderer) = self.renderer {
+                    renderer.set_scale_factor(scale_factor as f32);
+                }
+                if let Some(ref window) = self.window {
+                    window.request_redraw();
+                }
+                self.needs_draw = true;
+            }
+
             WindowEvent::ModifiersChanged(mods) => {
                 self.modifiers = mods.state();
             }
@@ -383,13 +381,76 @@ impl ApplicationHandler for UmpApp {
                 }
             }
 
+            WindowEvent::CursorMoved { position, .. } => {
+                self.mouse.set_cursor_pos(position.x as f32, position.y as f32);
+                let mut changed = false;
+                if let Some(ref mut app) = self.app {
+                    if let Some(ref window) = self.window {
+                        changed |= self.mouse.update_hover(app, window);
+                    }
+                    changed |= self.mouse.handle_drag(app);
+                }
+                if changed {
+                    self.mark_input_handled();
+                }
+            }
+
+            // Otherwise a hover highlight stays lit until the pointer comes back.
+            WindowEvent::CursorLeft { .. } => {
+                if let Some(ref mut app) = self.app
+                    && app.hover.take().is_some()
+                {
+                    self.mark_input_handled();
+                }
+            }
+
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Left,
+                ..
+            } => {
+                let handled = if let Some(ref mut app) = self.app {
+                    self.mouse.handle_left_press(app)
+                } else {
+                    false
+                };
+                if handled {
+                    self.mark_input_handled();
+                }
+            }
+
+            WindowEvent::MouseInput {
+                state: ElementState::Released,
+                button: MouseButton::Left,
+                ..
+            } => {
+                self.mouse.end_drag();
+            }
+
+            WindowEvent::MouseWheel { delta, .. } => {
+                let (row_px, roll_step_px) = self
+                    .renderer
+                    .as_ref()
+                    .map(|r| (r.cell_size().1 * ROW_HEIGHT, px(40.0, r.scale_factor())))
+                    .unwrap_or((0.0, 0.0));
+                let shift = self.modifiers.shift_key();
+                let handled = if let Some(ref mut app) = self.app {
+                    self.mouse.handle_wheel(app, delta, row_px, roll_step_px, shift)
+                } else {
+                    false
+                };
+                if handled {
+                    self.mark_input_handled();
+                }
+            }
+
             WindowEvent::RedrawRequested => {
                 if let (Some(renderer), Some(app)) =
                     (&mut self.renderer, &mut self.app)
                 {
                     match renderer.begin_frame() {
                         Ok(()) => {
-                            renderer.clear(BG_COLOR);
+                            renderer.clear(theme::GROUND);
                             render(renderer, app);
                             if let Err(e) = renderer.end_frame() {
                                 log_warn!("Render error: {}", e);

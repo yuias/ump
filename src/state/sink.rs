@@ -14,25 +14,11 @@ impl EventSink for SharedStateSink<'_> {
     fn on_event(&mut self, evt: &TimedMidiEvent) {
         let shared = self.0;
         match &evt.event {
-            MidiEvent::NoteOn { port, channel, key, vel } => {
+            MidiEvent::NoteOn { port, channel, vel, .. } => {
                 let flat_ch = *port as usize * 16 + *channel as usize;
                 shared.channel_states.velocity[flat_ch].store(*vel as u32, Ordering::Relaxed);
-                let prev_tick = shared.monitor.note_tick[flat_ch].load(Ordering::Relaxed);
-                let st = if prev_tick > 0 { evt.tick.saturating_sub(prev_tick as u64) as u32 } else { 0 };
-                shared.monitor.note_key[flat_ch].store(*key as u32, Ordering::Relaxed);
-                shared.monitor.note_vel[flat_ch].store(*vel as u32, Ordering::Relaxed);
-                shared.monitor.note_tick[flat_ch].store(evt.tick as u32, Ordering::Relaxed);
-                shared.monitor.step_time[flat_ch].store(st, Ordering::Relaxed);
             }
-            MidiEvent::NoteOff { port, channel, .. } => {
-                let flat_ch = *port as usize * 16 + *channel as usize;
-                // Gate time: duration from NoteOn to NoteOff
-                let on_tick = shared.monitor.note_tick[flat_ch].load(Ordering::Relaxed);
-                if on_tick > 0 {
-                    let gt = evt.tick.saturating_sub(on_tick as u64) as u32;
-                    shared.monitor.gate_time[flat_ch].store(gt, Ordering::Relaxed);
-                }
-            }
+            MidiEvent::NoteOff { .. } => {}
             MidiEvent::ProgramChange { port, channel, program } => {
                 let flat_ch = *port as usize * 16 + *channel as usize;
                 shared.channel_states.program[flat_ch].store(*program as u32, Ordering::Relaxed);
@@ -99,6 +85,5 @@ impl EventSink for SharedStateSink<'_> {
         shared.channel_states.reset();
         let pc = shared.port_count.load(Ordering::Relaxed) as u8;
         shared.init_drum_channels(pc);
-        shared.monitor.reset();
     }
 }

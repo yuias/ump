@@ -1,8 +1,5 @@
 //! Renderer trait abstraction and supporting types.
 
-#[cfg(feature = "d2d")]
-pub mod d2d;
-
 #[cfg(feature = "wgpu-backend")]
 pub mod wgpu_backend;
 
@@ -32,7 +29,7 @@ impl std::error::Error for RenderError {}
 
 pub type RenderResult<T> = Result<T, RenderError>;
 
-/// Abstract renderer interface. Implementations: D2DRenderer (Windows), WgpuRenderer (cross-platform).
+/// Abstract renderer interface. Implementation: WgpuRenderer (cross-platform).
 pub trait Renderer {
     /// Resize the render target.
     fn resize(&mut self, width: u32, height: u32) -> RenderResult<()>;
@@ -49,11 +46,9 @@ pub trait Renderer {
     /// Fill a pixel rectangle with a solid color.
     fn fill_rect(&mut self, rect: types::Rect, color: Color);
 
-    /// Draw a vertical line.
-    fn draw_vline(&mut self, x: f32, y_top: f32, y_bottom: f32, color: Color, width: f32);
-
-    /// Draw a horizontal line.
-    fn draw_hline(&mut self, y: f32, x_left: f32, x_right: f32, color: Color, width: f32);
+    /// Fill a rect with a checkerboard of `fg` and `bg` dots aligned to screen pixels.
+    /// `bg: None` leaves the off-dots transparent so underlying content shows through.
+    fn fill_dither(&mut self, rect: types::Rect, fg: Color, bg: Option<Color>);
 
     /// Draw text at a pixel position (for non-grid text, e.g. labels).
     fn draw_text(&mut self, x: f32, y: f32, text: &str, color: Color, size: f32);
@@ -64,11 +59,24 @@ pub trait Renderer {
     /// Get the cell size in pixels (width, height).
     fn cell_size(&self) -> (f32, f32);
 
+    /// Pixel font size that `cell_size` was measured at. `draw_text` sizes are
+    /// font sizes, not line heights, so scale text widths by `size / font_size()`.
+    fn font_size(&self) -> f32;
+
     /// Get the window/surface size in pixels (width, height).
     fn window_size(&self) -> (u32, u32);
 
+    /// Window scale factor (1.0 = 96 DPI).
+    fn scale_factor(&self) -> f32;
+
+    /// Size of one "dot" in physical pixels: the scale factor rounded, at least 1.
+    /// Also used as the standard frame line width.
+    fn dot_size(&self) -> f32 {
+        self.scale_factor().round().max(1.0)
+    }
+
     /// Begin an overlay layer. Subsequent draw calls belong to the overlay,
     /// which is rendered on top of all previous content (including text).
-    /// Default is a no-op (correct for immediate-mode backends like D2D).
+    /// Default is a no-op (correct for immediate-mode backends).
     fn begin_overlay(&mut self) {}
 }

@@ -1,36 +1,76 @@
-//! Color palette for 16 MIDI channels.
+//! PC-98-style color palette: theme tokens and per-channel MIDI colors.
 
-use crate::renderer::types::Color;
+use crate::renderer::types::{Color, Rect};
+use crate::renderer::Renderer;
 
-/// Returns a distinct color for each MIDI channel (0-15).
+/// Base ground (window background).
+pub const GROUND: Color = Color::rgb(0x00, 0x00, 0x00);
+/// Header bar background.
+pub const BAR_BG: Color = Color::rgb(0x22, 0x33, 0xCC);
+/// Header bar foreground.
+pub const BAR_FG: Color = Color::rgb(0xFF, 0xFF, 0xFF);
+/// Panel frame line color.
+pub const FRAME: Color = Color::rgb(0x22, 0xCC, 0xCC);
+/// Panel title strip background.
+pub const TITLE_BG: Color = Color::rgb(0x22, 0xCC, 0xCC);
+/// Panel title strip text color.
+pub const TITLE_FG: Color = Color::rgb(0x00, 0x00, 0x00);
+/// Primary body text color.
+pub const TEXT: Color = Color::rgb(0xEE, 0xEE, 0xEE);
+/// Dimmed/secondary text color.
+pub const DIM: Color = Color::rgb(0x88, 0x88, 0x88);
+/// Highlight/emphasis color.
+pub const ACCENT: Color = Color::rgb(0xEE, 0xDD, 0x22);
+/// Playback cursor / muted indicator color.
+pub const PLAYHEAD: Color = Color::rgb(0xEE, 0x22, 0x33);
+/// Selected row background.
+pub const SELECTED_BG: Color = Color::rgb(0x22, 0x33, 0xCC);
+/// Recessed well background (e.g. empty progress track).
+pub const WELL: Color = Color::rgb(0x16, 0x16, 0x16);
+/// Positive/playing status color.
+#[allow(dead_code)] // no longer drawn since the track list dropped the PLAY/MUTE status column
+pub const OK: Color = Color::rgb(0x22, 0xCC, 0x44);
+/// Piano roll beat gridline color.
+pub const BEAT: Color = Color::rgb(0x16, 0x16, 0x3A);
+/// Piano roll measure gridline color.
+pub const MEASURE: Color = Color::rgb(0x22, 0x33, 0xCC);
+/// Piano roll black-key row background.
+pub const KEY_ROW_BLACK: Color = Color::rgb(0x07, 0x07, 0x18);
+/// Piano key (white key) color.
+pub const KEY_WHITE: Color = Color::rgb(0xCC, 0xCC, 0xCC);
+/// Piano key (black key) color.
+pub const KEY_BLACK: Color = Color::rgb(0x11, 0x11, 0x11);
+/// Function-key bar background.
+pub const FKEY_BG: Color = Color::rgb(0xEE, 0xEE, 0xEE);
+/// Function-key bar text color.
+pub const FKEY_FG: Color = Color::rgb(0x00, 0x00, 0x00);
+
+/// Base colors for MIDI channels 0-7. Channels 8-15 reuse these via dithering
+/// (see `channel_fill`) since 8 hues cannot distinguish 16 channels on their own.
+const CHANNEL_COLORS: [Color; 8] = [
+    Color::rgb(0xEE, 0x22, 0x33),
+    Color::rgb(0x22, 0xCC, 0xCC),
+    Color::rgb(0x22, 0xCC, 0x44),
+    Color::rgb(0xEE, 0xDD, 0x22),
+    Color::rgb(0xCC, 0x33, 0xCC),
+    Color::rgb(0x55, 0x66, 0xFF),
+    Color::rgb(0xEE, 0xEE, 0xEE),
+    Color::rgb(0x99, 0x99, 0x99),
+];
+
+/// Returns a distinct color for each MIDI channel (0-15), cycling through 8 base hues.
 pub fn channel_color(channel: u8) -> Color {
-    match channel {
-        0 => Color::rgb(255, 100, 100),   // Red
-        1 => Color::rgb(100, 200, 255),   // Sky blue
-        2 => Color::rgb(100, 255, 100),   // Green
-        3 => Color::rgb(255, 200, 50),    // Orange
-        4 => Color::rgb(200, 100, 255),   // Purple
-        5 => Color::rgb(255, 150, 200),   // Pink
-        6 => Color::rgb(100, 255, 200),   // Teal
-        7 => Color::rgb(255, 255, 100),   // Yellow
-        8 => Color::rgb(150, 150, 255),   // Periwinkle
-        9 => Color::rgb(255, 180, 100),   // Peach (drums)
-        10 => Color::rgb(100, 200, 150),  // Sage
-        11 => Color::rgb(200, 150, 100),  // Tan
-        12 => Color::rgb(150, 255, 150),  // Light green
-        13 => Color::rgb(200, 200, 255),  // Lavender
-        14 => Color::rgb(255, 200, 200),  // Salmon
-        15 => Color::rgb(200, 255, 255),  // Cyan
-        _ => Color::rgb(255, 255, 255),
-    }
+    CHANNEL_COLORS[(channel % 8) as usize]
 }
 
-/// Border/header style colors.
-pub const BORDER_COLOR: Color = Color::rgb(80, 80, 100);
-pub const HEADER_FG: Color = Color::rgb(200, 200, 220);
-pub const HEADER_DIM: Color = Color::rgb(120, 120, 140);
-pub const PLAYHEAD_COLOR: Color = Color::rgb(255, 255, 255);
-pub const PROGRESS_FILLED: Color = Color::rgb(100, 180, 255);
-pub const PROGRESS_EMPTY: Color = Color::rgb(50, 50, 70);
-pub const MUTED_COLOR: Color = Color::rgb(80, 80, 80);
-pub const SELECTED_BG: Color = Color::rgb(40, 40, 60);
+/// Fill `rect` with the color for MIDI channel `ch`. Channels 0-7 get a solid fill;
+/// channels 8-15 reuse the same 8 hues but dithered, so the checker pattern is the
+/// second visual axis that distinguishes them from their low counterpart.
+pub fn channel_fill(renderer: &mut dyn Renderer, rect: Rect, ch: u8, bg: Option<Color>) {
+    let color = channel_color(ch);
+    if ch < 8 {
+        renderer.fill_rect(rect, color);
+    } else {
+        renderer.fill_dither(rect, color, bg);
+    }
+}

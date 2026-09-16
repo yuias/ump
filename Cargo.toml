@@ -19,7 +19,6 @@ serde = { version = "1", features = ["derive"] }
 
 [features]
 default = ["wgpu-backend"]
-d2d = ["dep:windows", "dep:windows-numerics"]
 wgpu-backend = ["dep:wgpu", "dep:glyphon", "dep:bytemuck", "dep:pollster"]
 
 [dependencies]
@@ -27,18 +26,6 @@ ump-playback = { path = "crates/ump-playback", features = ["serde"] }
 log = { workspace = true }
 cpal = "0.18"
 winit = "0.30"
-windows = { version = "0.62", optional = true, features = [
-    "Foundation_Numerics",
-    "Win32_Foundation",
-    "Win32_Graphics_Direct2D",
-    "Win32_Graphics_Direct2D_Common",
-    "Win32_Graphics_DirectWrite",
-    "Win32_Graphics_Dxgi_Common",
-    "Win32_Graphics_Gdi",
-    "Win32_System_Com",
-    "Win32_System_SystemInformation",
-] }
-windows-numerics = { version = "0.3", optional = true }
 wgpu = { version = "30", optional = true }
 glyphon = { version = "0.12", optional = true }
 bytemuck = { version = "1", features = ["derive"], optional = true }

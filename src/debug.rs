@@ -141,40 +141,25 @@ fn rotate_file(path: &PathBuf) {
     let _ = fs::rename(path, rotated);
 }
 
-/// Simple timestamp without external crate: YYYY-MM-DD HH:MM:SS (local time).
+/// Simple timestamp without external crate: YYYY-MM-DD HH:MM:SS (UTC).
 fn chrono_now() -> String {
-    // Convert to local time via Windows API (only when d2d feature provides `windows` crate)
-    #[cfg(feature = "d2d")]
-    {
-        use windows::Win32::System::SystemInformation::GetLocalTime;
-
-        let st = unsafe { GetLocalTime() };
-        format!(
-            "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
-            st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond
-        )
-    }
-
-    #[cfg(not(feature = "d2d"))]
-    {
-        // Fallback: UTC
-        let secs = std::time::SystemTime::now()
-            .duration_since(std::time::SystemTime::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        let days = secs / 86400;
-        let time = secs % 86400;
-        let h = time / 3600;
-        let m = (time % 3600) / 60;
-        let sec = time % 60;
-        // Simplified date from days since epoch
-        let (y, mo, d) = days_to_ymd(days);
-        format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", y, mo, d, h, m, sec)
-    }
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let days = secs / 86400;
+    let time = secs % 86400;
+    let h = time / 3600;
+    let m = (time % 3600) / 60;
+    let sec = time % 60;
+    // Simplified date from days since epoch
+    let (y, mo, d) = days_to_ymd(days);
+    format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", y, mo, d, h, m, sec)
 }
 
-#[cfg(not(feature = "d2d"))]
-fn days_to_ymd(days: u64) -> (u64, u64, u64) {
+/// Also used by the file browser to format file modification times (UTC,
+/// since no local-time crate is bundled).
+pub(crate) fn days_to_ymd(days: u64) -> (u64, u64, u64) {
     // Simple Gregorian conversion from days since 1970-01-01
     let mut y = 1970;
     let mut rem = days;

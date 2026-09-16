@@ -40,7 +40,7 @@ pub struct GlyphonTextRenderer {
     buffer_cache: HashMap<TextCacheKey, Buffer>,
 
     custom_family: Option<String>,
-    default_font_size: f32,
+    pub(crate) default_font_size: f32,
     pub cell_width: f32,
     pub cell_height: f32,
     width: u32,
@@ -151,7 +151,21 @@ impl GlyphonTextRenderer {
             height = run.line_height;
         }
 
-        (width, height)
+        // Snap to whole physical pixels: rect edges and dot fonts are pixel-snapped
+        // elsewhere, and fractional cells would make columns drift.
+        (width.round(), height.round())
+    }
+
+    /// Re-measure glyph metrics at a new physical px size and drop cached glyph
+    /// buffers shaped at the old size (they become dead weight, not incorrect —
+    /// buffers are keyed by their own size, so stale entries are just never reused).
+    pub fn set_font_size(&mut self, px: f32) {
+        let (cell_width, cell_height) =
+            Self::measure_cell(&mut self.font_system, px, self.custom_family.as_deref());
+        self.default_font_size = px;
+        self.cell_width = cell_width;
+        self.cell_height = cell_height;
+        self.buffer_cache.clear();
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -176,8 +190,8 @@ impl GlyphonTextRenderer {
         if text.is_empty() {
             return;
         }
-        // Snap to default_font_size when size ≈ cell_height (matches D2D behavior
-        // where format_regular at original font_size is used for standard text).
+        // Snap to default_font_size when size ≈ cell_height, so standard text
+        // is always shaped at the font's original size rather than a scaled one.
         let effective_size = if (size - self.cell_height).abs() < 1.0 {
             self.default_font_size
         } else {

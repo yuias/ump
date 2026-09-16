@@ -2465,8 +2465,6 @@ dependencies = [
  "ump-playback",
  "unicode-width",
  "wgpu",
- "windows",
- "windows-numerics",
  "winit",
 ]
 

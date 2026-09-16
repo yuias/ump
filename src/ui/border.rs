@@ -1,51 +1,37 @@
-//! Box-drawing border utility for native pixel rendering.
+//! Panel helper: PC-98-style frame with a solid title strip (native pixel rendering).
 
-use crate::renderer::types::{Color, Rect};
+use crate::renderer::types::Rect;
 use crate::renderer::Renderer;
+use crate::ui::layout::px;
+use crate::ui::theme;
 
-/// Draw a single-line box border with optional title (native pixel rendering).
-pub fn draw_border(renderer: &mut dyn Renderer, area: Rect, title: &str, color: Color) {
-    let (cw, ch) = renderer.cell_size();
-
-    if area.width < cw * 2.0 || area.height < ch * 2.0 {
+/// Draw a panel: `GROUND` fill, a solid `TITLE_BG` title strip with left-aligned
+/// `title` text, and a `FRAME`-colored border inset by `renderer.dot_size()`.
+pub fn draw_panel(renderer: &mut dyn Renderer, area: Rect, title: &str, title_h: f32) {
+    if area.width <= 0.0 || area.height <= 0.0 {
         return;
     }
 
+    renderer.fill_rect(area, theme::GROUND);
+    renderer.fill_rect(Rect::new(area.x, area.y, area.width, title_h), theme::TITLE_BG);
+
+    let dot = renderer.dot_size();
     let left = area.x;
-    let right = area.right();
     let top = area.y;
+    let right = area.right();
     let bottom = area.bottom();
-    let line_w = 1.0;
 
-    // Top edge
-    renderer.draw_hline(top, left, right, color, line_w);
-    // Bottom edge
-    renderer.draw_hline(bottom, left, right, color, line_w);
-    // Left edge
-    renderer.draw_vline(left, top, bottom, color, line_w);
-    // Right edge
-    renderer.draw_vline(right, top, bottom, color, line_w);
+    // Frame edges, drawn inside the rect so they stay within `area`.
+    renderer.fill_rect(Rect::new(left, top, area.width, dot), theme::FRAME); // top
+    renderer.fill_rect(Rect::new(left, bottom - dot, area.width, dot), theme::FRAME); // bottom
+    renderer.fill_rect(Rect::new(left, top, dot, area.height), theme::FRAME); // left
+    renderer.fill_rect(Rect::new(right - dot, top, dot, area.height), theme::FRAME); // right
 
-    // Title centered on top edge
     if !title.is_empty() {
-        let title_w = title.len() as f32 * cw;
-        let title_x = left + (area.width - title_w) / 2.0;
-        // Clear background behind title
-        let bg = crate::renderer::types::BG_COLOR;
-        renderer.fill_rect(Rect::new(title_x, top - ch * 0.3, title_w, ch), bg);
-        renderer.draw_text(title_x, top - ch * 0.3, title, color, ch);
+        let scale = renderer.scale_factor();
+        let (_, ch) = renderer.cell_size();
+        let x = area.x + px(8.0, scale);
+        let y = area.y + (title_h - ch) / 2.0;
+        renderer.draw_text(x, y, title, theme::TITLE_FG, ch);
     }
-}
-
-/// Return the inner area of a bordered region (1 cell inset).
-pub fn inner_rect(area: Rect, cell_w: f32, cell_h: f32) -> Rect {
-    if area.width < cell_w * 2.0 || area.height < cell_h * 2.0 {
-        return Rect::new(area.x, area.y, 0.0, 0.0);
-    }
-    Rect::new(
-        area.x + cell_w,
-        area.y + cell_h,
-        area.width - cell_w * 2.0,
-        area.height - cell_h * 2.0,
-    )
 }

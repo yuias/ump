@@ -34,6 +34,9 @@ pub struct WgpuRenderer {
     width: u32,
     height: u32,
     clear_color: Color,
+    scale_factor: f32,
+    /// Font size in logical px, as configured. Physical px = this * `scale_factor`.
+    logical_font_size: f32,
 
     /// Split point for overlay layer (rect index, text index).
     /// When set, end_frame renders base then overlay in separate passes.
@@ -48,6 +51,7 @@ impl WgpuRenderer {
         height: u32,
         font_path: Option<&str>,
         font_size: f32,
+        scale_factor: f32,
     ) -> Result<Self, RenderError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
@@ -80,7 +84,7 @@ impl WgpuRenderer {
 
         let surface_caps = surface.get_capabilities(&adapter);
         // Prefer non-sRGB format to avoid double gamma correction
-        // (our Color values are already in sRGB space, matching D2D behavior)
+        // (our Color values are already in sRGB space)
         let surface_format = surface_caps
             .formats
             .iter()
@@ -102,7 +106,14 @@ impl WgpuRenderer {
         surface.configure(&device, &surface_config);
 
         let rect_pipeline = RectPipeline::new(&device, surface_format, width, height);
-        let text = GlyphonTextRenderer::new(&device, &queue, surface_format, font_path, font_size)?;
+        // `font_size` is logical px; the text renderer shapes glyphs in physical px.
+        let text = GlyphonTextRenderer::new(
+            &device,
+            &queue,
+            surface_format,
+            font_path,
+            font_size * scale_factor,
+        )?;
 
         // Pre-allocate persistent instance buffer
         let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -125,9 +136,35 @@ impl WgpuRenderer {
             width,
             height,
             clear_color: Color::rgb(0, 0, 0),
+            scale_factor,
+            logical_font_size: font_size,
             overlay_split: None,
         })
     }
+
+    /// Update the window scale factor (called on `ScaleFactorChanged`).
+    /// Re-measures glyph metrics so text stays at `logical_font_size` on screen.
+    pub fn set_scale_factor(&mut self, scale_factor: f32) {
+        self.scale_factor = scale_factor;
+        self.text.set_font_size(self.logical_font_size * scale_factor);
+    }
+}
+
+/// Snap a rect's edges to physical pixel boundaries, rounding each edge
+/// independently so adjacent rects stay seamless. Returns `None` for
+/// non-positive input; widens a snapped-to-zero side to 1px so thin
+/// elements do not vanish.
+fn snap_rect(rect: Rect) -> Option<Rect> {
+    if rect.width <= 0.0 || rect.height <= 0.0 {
+        return None;
+    }
+    let x0 = rect.x.round();
+    let x1 = (rect.x + rect.width).round();
+    let y0 = rect.y.round();
+    let y1 = (rect.y + rect.height).round();
+    let width = if x1 - x0 == 0.0 { 1.0 } else { x1 - x0 };
+    let height = if y1 - y0 == 0.0 { 1.0 } else { y1 - y0 };
+    Some(Rect::new(x0, y0, width, height))
 }
 
 impl Renderer for WgpuRenderer {
@@ -309,25 +346,36 @@ impl Renderer for WgpuRenderer {
     }
 
     fn fill_rect(&mut self, rect: Rect, color: Color) {
+        let Some(rect) = snap_rect(rect) else {
+            return;
+        };
         let (r, g, b) = color.to_f32();
         self.rect_instances.push(RectInstance {
             rect: [rect.x, rect.y, rect.width, rect.height],
             color: [r, g, b, 1.0],
+            bg: [0.0; 4],
+            params: [0.0, self.dot_size(), 0.0, 0.0],
         });
     }
 
-    fn draw_vline(&mut self, x: f32, y_top: f32, y_bottom: f32, color: Color, width: f32) {
-        self.fill_rect(
-            Rect::new(x - width * 0.5, y_top, width, y_bottom - y_top),
-            color,
-        );
-    }
-
-    fn draw_hline(&mut self, y: f32, x_left: f32, x_right: f32, color: Color, width: f32) {
-        self.fill_rect(
-            Rect::new(x_left, y - width * 0.5, x_right - x_left, width),
-            color,
-        );
+    fn fill_dither(&mut self, rect: Rect, fg: Color, bg: Option<Color>) {
+        let Some(rect) = snap_rect(rect) else {
+            return;
+        };
+        let (r, g, b) = fg.to_f32();
+        let bg = match bg {
+            Some(c) => {
+                let (br, bg, bb) = c.to_f32();
+                [br, bg, bb, 1.0]
+            }
+            None => [0.0, 0.0, 0.0, 0.0],
+        };
+        self.rect_instances.push(RectInstance {
+            rect: [rect.x, rect.y, rect.width, rect.height],
+            color: [r, g, b, 1.0],
+            bg,
+            params: [1.0, self.dot_size(), 0.0, 0.0],
+        });
     }
 
     fn draw_text(&mut self, x: f32, y: f32, text: &str, color: Color, size: f32) {
@@ -342,8 +390,16 @@ impl Renderer for WgpuRenderer {
         (self.text.cell_width, self.text.cell_height)
     }
 
+    fn font_size(&self) -> f32 {
+        self.text.default_font_size
+    }
+
     fn window_size(&self) -> (u32, u32) {
         (self.width, self.height)
+    }
+
+    fn scale_factor(&self) -> f32 {
+        self.scale_factor
     }
 
     fn begin_overlay(&mut self) {

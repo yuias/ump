@@ -2,7 +2,7 @@
 
 A native GUI MIDI player with SF2 soundfont synthesis.
 
-Built with Rust, using hardware-accelerated rendering (Direct2D or wgpu) and a custom sequencer for low-latency audio playback.
+Built with Rust, using hardware-accelerated rendering (wgpu) and a custom sequencer for low-latency audio playback.
 
 ## Features
 
@@ -27,8 +27,8 @@ Built with Rust, using hardware-accelerated rendering (Direct2D or wgpu) and a c
 | `Left` / `Right` | Seek -5s / +5s |
 | `Up` / `Down` | Cursor Up / Down |
 | `M` | Mute / Unmute track |
-| `P` | Toggle right panel (Monitor / Piano Roll) |
 | `V` | Toggle piano roll orientation |
+| `Shift+V` | Toggle vertical flow (falling / rising) |
 | `E` | Toggle track view (Default / Detail) |
 | `+` / `-` | Volume Up / Down |
 | `[` / `]` | Zoom Out / In |
@@ -44,25 +44,16 @@ Built with Rust, using hardware-accelerated rendering (Direct2D or wgpu) and a c
 
 ### Rendering Backend
 
-Two rendering backends are available, selected at compile time via Cargo feature flags:
-
-| Feature | Backend | Platform | Default |
-|---|---|---|---|
-| `wgpu-backend` | wgpu + glyphon | Cross-platform (Metal / DX12 / Vulkan) | Yes |
-| `d2d` | Direct2D / DirectWrite | Windows only | -- |
+Rendering uses wgpu + glyphon, enabled via the `wgpu-backend` Cargo feature (on by default):
 
 ```sh
-# Default (wgpu) -- works on macOS, Windows, and Linux
+# Works on macOS, Windows, and Linux
 cargo build --release
-
-# Windows only (D2D)
-cargo build --release --no-default-features --features d2d
 ```
 
 ### Requirements
 
 - Rust 1.70+ (edition 2021)
-- **D2D backend:** Windows 10 or later
 - **wgpu backend:** Vulkan, Metal, or DX12 capable GPU
 
 ### Usage
@@ -77,6 +68,45 @@ ump path/to/file.mid
 # Specify a soundfont
 ump path/to/file.mid --sf2 path/to/soundfont.sf2
 ```
+
+## Fonts
+
+ump does not bundle any font files. Without a configured or auto-detected font it falls back to the system default sans-serif font.
+
+The recommended dot font is [DotGothic16](https://fonts.google.com/specimen/DotGothic16) (SIL OFL 1.1). Fetch it with:
+
+```sh
+# Windows (PowerShell)
+scripts\fetch-font.ps1
+
+# macOS / Linux
+scripts/fetch-font.sh
+```
+
+Both scripts download the font into ump's font directory and verify it against a pinned commit and checksum.
+
+| Platform | Font directory |
+|---|---|
+| Windows | `%APPDATA%\ump\fonts` |
+| Linux | `~/.config/ump/fonts` |
+| macOS | `~/Library/Application Support/ump/fonts` |
+
+Font resolution order, applied at startup:
+
+1. `font.path` in `settings.toml`, if set.
+2. Otherwise, the first matching font file found (non-recursive) in the font directory above.
+3. Otherwise, the system default font.
+
+Auto-detected fonts default to a 16px size (a multiple of their 16-dot grid renders crisply); set `font.size` in `settings.toml` to override it.
+
+### Closer to PC-98: JF Dot fonts
+
+For a look closer to the original PC-98 dot font, use `jiskan16s-1990` or `Shinonome Gothic 16` from the [JF Dot font page](http://jikasei.me/font/jf-dotfont/) -- both are public-domain variants. These are only distributed as a zip archive, so `fetch-font.ps1`/`fetch-font.sh` cannot install them automatically:
+
+1. Download the archive from the JF Dot font page.
+2. Copy the desired `.ttf` (matching `jiskan16s` or `shinonome`+`16` in the file name) into the font directory above.
+
+Do not use plain `jiskan16` -- its half-width glyphs are Sony-licensed, and ump's auto-detection deliberately excludes it.
 
 ## Configuration
 
@@ -107,7 +137,6 @@ When a MIDI mode is detected or manually selected, the matching bundle is loaded
 
 ## Limitations
 
-- **D2D backend is Windows-only** -- The D2D (Direct2D) backend requires `--no-default-features --features d2d` and only builds on Windows.
 - **SysEx support is partial** -- GM/GS/XG/GM2 reset, Master Volume, master tune, scale tuning, and GS drum map changes are processed. Other SysEx commands (e.g. GS part parameters, XG effect settings) are parsed but not fully reproduced.
 - **SF2 modulators are partial** -- SF2 Default Modulators (Phase 1) are implemented. Custom per-preset modulators from `pmod`/`imod` chunks are not yet parsed.
 - **No MIDI output** -- Playback is software-synthesized only. External MIDI device output is not supported.
@@ -121,7 +150,6 @@ When a MIDI mode is detected or manually selected, the matching bundle is loaded
 | [rustysynth](https://github.com/yuiAs/rustysynth) | SF2 soundfont synthesizer (fork with SysEx, mute, effect control, cubic interpolation, FDN reverb, SVF filter, and more) |
 | [cpal](https://crates.io/crates/cpal) | Cross-platform audio output |
 | [winit](https://crates.io/crates/winit) | Window creation and event loop |
-| [windows](https://crates.io/crates/windows) | Direct2D / DirectWrite rendering (d2d feature) |
 | [wgpu](https://crates.io/crates/wgpu) | Cross-platform GPU rendering (wgpu-backend feature) |
 | [glyphon](https://crates.io/crates/glyphon) | Text rendering for wgpu (wgpu-backend feature) |
 | [clap](https://crates.io/crates/clap) | Command-line argument parsing |

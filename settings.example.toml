@@ -26,12 +26,17 @@
 volume = 80
 
 [font]
-# Custom font file (.ttf / .otf / .ttc)
-# Falls back to Consolas if not set or loading fails.
+# Custom font file (.ttf / .otf / .ttc). Overrides auto-detection below.
+# If not set, ump scans its font directory (see README.md's Fonts section)
+# for a known dot font and uses the first match; if nothing is set or found,
+# it falls back to the system default sans-serif font (not a fixed-width
+# font — text metrics assume a custom monospace font here).
 # path = "C:/Windows/Fonts/msgothic.ttc"
 
-# Font size in points
-size = 14.0
+# Font size in logical pixels (scaled by the display's DPI scale factor).
+# Default: 14, or 16 when a font was auto-detected (dot fonts render
+# crisply at multiples of their 16-dot grid).
+# size = 14.0
 
 [window]
 # Window position and size in physical pixels (auto-saved on exit)
@@ -41,11 +46,11 @@ size = 14.0
 # height = 720
 
 [display]
-# Right panel mode: "PianoRoll" (default) or "Monitor" (tracker-style event monitor)
-right_panel_mode = "PianoRoll"
-
 # Piano roll orientation: false = horizontal (default), true = vertical
 piano_roll_vertical = false
+
+# Vertical flow: "down" = notes fall onto keyboard at bottom (default), "up" = rise toward keyboard at top
+piano_roll_flow = "down"
 
 # Track view mode: "Default" (compact per-channel) or "Detail" (per-track tree)
 track_view_mode = "Default"

@@ -75,12 +75,8 @@ fn process_player_key(app: &mut App, event: &KeyEvent, modifiers: ModifiersState
             "q" | "Q" => return true,
             "s" | "S" => app.stop(),
             "m" | "M" => app.toggle_mute_selected(),
-            "p" | "P" => app.toggle_right_panel(),
-            "v" | "V" => {
-                if app.right_panel_mode == crate::app::RightPanelMode::PianoRoll {
-                    app.toggle_piano_roll_orientation();
-                }
-            }
+            "v" | "V" if modifiers.shift_key() => app.toggle_piano_roll_flow(),
+            "v" | "V" => app.toggle_piano_roll_orientation(),
             "e" | "E" => app.toggle_track_view_mode(),
             "+" | "=" => app.volume_up(),
             "-" => app.volume_down(),
@@ -141,10 +137,7 @@ fn process_browser_key(app: &mut App, event: &KeyEvent, modifiers: ModifiersStat
     if let Key::Named(named) = &event.logical_key {
         match named {
             NamedKey::Escape => {
-                if app.has_midi() && app.has_sf2() {
-                    app.screen = AppScreen::Player;
-                    app.file_browser = None;
-                } else {
+                if !close_browser(app) {
                     return true;
                 }
             }
@@ -177,7 +170,21 @@ fn process_browser_key(app: &mut App, event: &KeyEvent, modifiers: ModifiersStat
     false
 }
 
-fn handle_browser_enter(app: &mut App) {
+/// Close the browser and return to the player screen, if a MIDI and an SF2
+/// are both loaded. Returns `false` when there's nothing to fall back to
+/// (Escape then quits instead; a clickable Cancel button is hidden in that
+/// case, see `FileBrowser::render`'s `can_cancel`).
+pub fn close_browser(app: &mut App) -> bool {
+    if app.has_midi() && app.has_sf2() {
+        app.screen = AppScreen::Player;
+        app.file_browser = None;
+        true
+    } else {
+        false
+    }
+}
+
+pub fn handle_browser_enter(app: &mut App) {
     let result = app
         .file_browser
         .as_mut()
@@ -227,16 +234,13 @@ fn handle_browser_enter(app: &mut App) {
             }
         }
         BrowseResult::Cancel => {
-            if app.has_midi() && app.has_sf2() {
-                app.screen = AppScreen::Player;
-                app.file_browser = None;
-            }
+            close_browser(app);
         }
         BrowseResult::Continue => {}
     }
 }
 
-fn open_browser(app: &mut App, target: BrowseTarget) {
+pub fn open_browser(app: &mut App, target: BrowseTarget) {
     let browser = FileBrowser::new(target, app.last_browser_dir.as_deref());
     app.file_browser = Some(browser);
     app.screen = AppScreen::FileBrowser;
