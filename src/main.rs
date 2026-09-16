@@ -200,10 +200,10 @@ impl UmpApp {
 
         // Load mode-specific soundfont bundle if configured
         let mode_str = detected_mode.to_string();
-        if let Some(bundle) = app.config.soundfont.resolve_bundle(&mode_str).cloned() {
-            if let Err(e) = app.reload_bundle(&bundle) {
-                log_warn!("Failed to load bundle for detected mode {}: {:#}", mode_str, e);
-            }
+        if let Some(bundle) = app.config.soundfont.resolve_bundle(&mode_str).cloned()
+            && let Err(e) = app.reload_bundle(&bundle)
+        {
+            log_warn!("Failed to load bundle for detected mode {}: {:#}", mode_str, e);
         }
 
         let audio = AudioOutput::start(seq, synth, shared, self.sample_rate)?;
@@ -222,15 +222,15 @@ impl UmpApp {
     fn browser_start(&mut self, midi_path: Option<String>, sf2_path: Option<String>) {
         let mut app = App::new_empty(self.sample_rate, self.config.clone());
 
-        if let Some(ref sf2_p) = sf2_path {
-            if let Err(e) = app.reload_sf2(sf2_p) {
-                log_warn!("Failed to load SF2: {:#}", e);
-            }
+        if let Some(ref sf2_p) = sf2_path
+            && let Err(e) = app.reload_sf2(sf2_p)
+        {
+            log_warn!("Failed to load SF2: {:#}", e);
         }
-        if let Some(ref midi_p) = midi_path {
-            if let Err(e) = app.reload_midi(midi_p) {
-                log_warn!("Failed to load MIDI: {:#}", e);
-            }
+        if let Some(ref midi_p) = midi_path
+            && let Err(e) = app.reload_midi(midi_p)
+        {
+            log_warn!("Failed to load MIDI: {:#}", e);
         }
 
         let target = if !app.has_sf2() {
@@ -471,10 +471,10 @@ impl ApplicationHandler for UmpApp {
         match cause {
             StartCause::ResumeTimeReached { .. } | StartCause::Poll => {
                 // Check if playing state changed
-                if let Some(ref app) = self.app {
-                    if app.is_playing() {
-                        self.needs_draw = true;
-                    }
+                if let Some(ref app) = self.app
+                    && app.is_playing()
+                {
+                    self.needs_draw = true;
                 }
 
                 if self.needs_draw && self.last_draw.elapsed() >= self.frame_interval() {

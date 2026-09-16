@@ -63,16 +63,11 @@ impl GlyphonTextRenderer {
             let count_before = font_system.db().faces().count();
             match font_system.db_mut().load_font_file(path) {
                 Ok(()) => {
-                    let mut idx = 0;
-                    for face in font_system.db().faces() {
-                        if idx >= count_before {
-                            if let Some((name, _)) = face.families.first() {
-                                custom_family = Some(name.clone());
-                                break;
-                            }
-                        }
-                        idx += 1;
-                    }
+                    custom_family = font_system
+                        .db()
+                        .faces()
+                        .skip(count_before)
+                        .find_map(|face| face.families.first().map(|(name, _)| name.clone()));
                     if let Some(ref family) = custom_family {
                         log_info!("Custom font loaded: family={}", family);
                     }

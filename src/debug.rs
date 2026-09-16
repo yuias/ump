@@ -30,10 +30,10 @@ pub fn init(verbose: bool) {
     let log_path = config_dir.join("ump.log");
 
     // Check existing file size — rotate if already over limit
-    if let Ok(meta) = fs::metadata(&log_path) {
-        if meta.len() >= MAX_LOG_BYTES {
-            rotate_file(&log_path);
-        }
+    if let Ok(meta) = fs::metadata(&log_path)
+        && meta.len() >= MAX_LOG_BYTES
+    {
+        rotate_file(&log_path);
     }
 
     let file = match OpenOptions::new()
@@ -176,7 +176,7 @@ pub(crate) fn days_to_ymd(days: u64) -> (u64, u64, u64) {
         if rem < ml { mo = i; break; }
         rem -= ml;
     }
-    (y, (mo + 1) as u64, (rem + 1) as u64)
+    (y, (mo + 1) as u64, (rem + 1))
 }
 
 #[macro_export]

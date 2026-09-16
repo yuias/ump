@@ -30,11 +30,11 @@ impl std::fmt::Display for MidiMode {
 pub fn detect_mode(events: &[TimedMidiEvent]) -> MidiMode {
     // Phase 1: SysEx reset messages
     for evt in events {
-        if let MidiEvent::SysEx(data) = &evt.event {
-            if let Some(SysExCommand::SystemReset(mode)) = parse_sysex(data) {
-                log::info!("Mode detect: Phase 1 SysEx reset -> {}", mode);
-                return mode;
-            }
+        if let MidiEvent::SysEx(data) = &evt.event
+            && let Some(SysExCommand::SystemReset(mode)) = parse_sysex(data)
+        {
+            log::info!("Mode detect: Phase 1 SysEx reset -> {}", mode);
+            return mode;
         }
     }
 
@@ -46,10 +46,9 @@ pub fn detect_mode(events: &[TimedMidiEvent]) -> MidiMode {
             value,
             ..
         } = &evt.event
+            && !bank_msb_values.contains(value)
         {
-            if !bank_msb_values.contains(value) {
-                bank_msb_values.push(*value);
-            }
+            bank_msb_values.push(*value);
         }
     }
 

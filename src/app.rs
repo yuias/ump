@@ -727,10 +727,10 @@ impl App {
         }
 
         // Reset synth to clean state for the new mode
-        if let Ok(mut guard) = self.synth.lock() {
-            if let Some(ref mut synth) = *guard {
-                synth.system_reset();
-            }
+        if let Ok(mut guard) = self.synth.lock()
+            && let Some(ref mut synth) = *guard
+        {
+            synth.system_reset();
         }
 
         // Reset shared channel state

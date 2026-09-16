@@ -253,11 +253,11 @@ pub fn resolve_path(path: &str) -> String {
         return path.to_string();
     }
     // Relative: resolve against config directory
-    if let Some(config_path) = Config::config_path() {
-        if let Some(config_dir) = config_path.parent() {
-            let resolved = config_dir.join(p);
-            return resolved.to_string_lossy().to_string();
-        }
+    if let Some(config_path) = Config::config_path()
+        && let Some(config_dir) = config_path.parent()
+    {
+        let resolved = config_dir.join(p);
+        return resolved.to_string_lossy().to_string();
     }
     path.to_string()
 }

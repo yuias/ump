@@ -95,16 +95,16 @@ impl FileBrowser {
         self.entries.clear();
         self.show_drives = false;
 
-        if let Some(parent) = self.current_dir.parent() {
-            if parent != self.current_dir {
-                self.entries.push(Entry {
-                    name: "..".to_string(),
-                    path: parent.to_path_buf(),
-                    is_dir: true,
-                    size: 0,
-                    modified: None,
-                });
-            }
+        if let Some(parent) = self.current_dir.parent()
+            && parent != self.current_dir
+        {
+            self.entries.push(Entry {
+                name: "..".to_string(),
+                path: parent.to_path_buf(),
+                is_dir: true,
+                size: 0,
+                modified: None,
+            });
         }
 
         let Ok(read_dir) = fs::read_dir(&self.current_dir) else {
@@ -144,8 +144,8 @@ impl FileBrowser {
             }
         }
 
-        dirs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-        files.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        dirs.sort_by_key(|a| a.name.to_lowercase());
+        files.sort_by_key(|a| a.name.to_lowercase());
 
         self.entries.extend(dirs);
         self.entries.extend(files);

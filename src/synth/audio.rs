@@ -45,7 +45,7 @@ impl AudioOutput {
 
         let config = cpal::StreamConfig {
             channels: 2,
-            sample_rate: sample_rate,
+            sample_rate,
             buffer_size: cpal::BufferSize::Default,
         };
 
@@ -64,10 +64,9 @@ impl AudioOutput {
 
                 if let (Ok(mut seq), Ok(mut syn_opt)) =
                     (sequencer.try_lock(), synth.try_lock())
+                    && let Some(ref mut syn) = *syn_opt
                 {
-                    if let Some(ref mut syn) = *syn_opt {
-                        render(&mut seq, syn, &mut left, &mut right, &shared);
-                    }
+                    render(&mut seq, syn, &mut left, &mut right, &shared);
                 }
 
                 // Interleave into output buffer
