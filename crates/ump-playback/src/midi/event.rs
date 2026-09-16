@@ -88,6 +88,11 @@ pub struct MidiData {
     pub tracks: Vec<TrackInfo>,
     /// Total duration in ticks.
     pub total_ticks: u64,
+    /// Copyright notice (FF 02), if the file carries one.
+    pub copyright: Option<String>,
+    /// Free-form text events (FF 01) in file order. Sequencers use these for
+    /// comments, credits, and playback notes.
+    pub text: Vec<String>,
     /// Bitfield of channels that have at least one NoteOn event (port*16+ch).
     pub used_channels: u64,
     /// Number of MIDI ports used (1-4).

@@ -11,6 +11,7 @@ members = ["crates/ump-playback"]
 
 [workspace.dependencies]
 anyhow = "1"
+encoding_rs = "0.8"
 log = "0.4"
 midly = "0.5"
 rustysynth = { git = "https://github.com/yuiAs/rustysynth", branch = "develop" }

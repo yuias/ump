@@ -5,6 +5,7 @@ use midly::{MetaMessage, MidiMessage, Smf, TrackEventKind};
 
 use super::event::{MidiData, MidiEvent, NoteRect, TimedMidiEvent, TrackInfo};
 use super::tempo_map::TempoMap;
+use super::text::decode_meta_text;
 
 pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
     let smf = Smf::parse(bytes).context("Failed to parse MIDI file")?;
@@ -28,6 +29,8 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
     let mut tempo_changes: Vec<(u64, u32)> = Vec::new();
     let mut used_channels: u64 = 0;
     let mut max_port: u8 = 0;
+    let mut copyright: Option<String> = None;
+    let mut text_events: Vec<String> = Vec::new();
 
     for (track_idx, track) in smf.tracks.iter().enumerate() {
         let mut abs_tick: u64 = 0;
@@ -188,8 +191,21 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
                 }
                 TrackEventKind::Meta(meta) => match meta {
                     MetaMessage::TrackName(name_bytes) => {
-                        if let Ok(s) = std::str::from_utf8(name_bytes) {
-                            track_name = s.trim().to_string();
+                        track_name = decode_meta_text(name_bytes);
+                    }
+                    MetaMessage::Copyright(bytes) => {
+                        // Only the first notice: some files repeat it per track.
+                        if copyright.is_none() {
+                            let text = decode_meta_text(bytes);
+                            if !text.is_empty() {
+                                copyright = Some(text);
+                            }
+                        }
+                    }
+                    MetaMessage::Text(bytes) => {
+                        let text = decode_meta_text(bytes);
+                        if !text.is_empty() {
+                            text_events.push(text);
                         }
                     }
                     MetaMessage::Tempo(tempo) => {
@@ -290,6 +306,8 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
         note_rects: all_note_rects,
         tracks: track_infos,
         total_ticks,
+        copyright,
+        text: text_events,
         used_channels,
         port_count,
     };
@@ -301,4 +319,68 @@ pub fn parse_midi(bytes: &[u8]) -> Result<(MidiData, TempoMap)> {
     );
 
     Ok((midi_data, tempo_map))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Format 0, one track, one note, 96 ticks per quarter.
+    fn minimal_smf() -> Vec<u8> {
+        let track: Vec<u8> = vec![
+            0x00, 0x90, 0x3C, 0x40, // note on
+            0x60, 0x80, 0x3C, 0x00, // note off
+            0x00, 0xFF, 0x2F, 0x00, // end of track
+        ];
+        let mut smf = Vec::new();
+        smf.extend_from_slice(b"MThd");
+        smf.extend_from_slice(&6u32.to_be_bytes());
+        smf.extend_from_slice(&0u16.to_be_bytes()); // format 0
+        smf.extend_from_slice(&1u16.to_be_bytes()); // one track
+        smf.extend_from_slice(&96u16.to_be_bytes());
+        smf.extend_from_slice(b"MTrk");
+        smf.extend_from_slice(&(track.len() as u32).to_be_bytes());
+        smf.extend_from_slice(&track);
+        smf
+    }
+
+    #[test]
+    fn parses_plain_smf() {
+        let (data, _) = parse_midi(&minimal_smf()).unwrap();
+        assert_eq!(data.format, 0);
+        assert_eq!(data.note_rects.len(), 1);
+    }
+
+    #[test]
+    fn keeps_copyright_and_text() {
+        let mut track: Vec<u8> = Vec::new();
+        track.extend_from_slice(&[0x00, 0xFF, 0x02, 0x03]);
+        track.extend_from_slice(b"(c)");
+        track.extend_from_slice(&[0x00, 0xFF, 0x01, 0x04]);
+        track.extend_from_slice(b"note");
+        track.extend_from_slice(&[0x00, 0xFF, 0x2F, 0x00]);
+
+        let mut smf = Vec::new();
+        smf.extend_from_slice(b"MThd");
+        smf.extend_from_slice(&6u32.to_be_bytes());
+        smf.extend_from_slice(&0u16.to_be_bytes());
+        smf.extend_from_slice(&1u16.to_be_bytes());
+        smf.extend_from_slice(&96u16.to_be_bytes());
+        smf.extend_from_slice(b"MTrk");
+        smf.extend_from_slice(&(track.len() as u32).to_be_bytes());
+        smf.extend_from_slice(&track);
+
+        let (data, _) = parse_midi(&smf).unwrap();
+        assert_eq!(data.copyright.as_deref(), Some("(c)"));
+        assert_eq!(data.text, vec!["note".to_string()]);
+    }
+
+    #[test]
+    fn rejects_smpte_timing() {
+        let mut smf = minimal_smf();
+        // Negative frames-per-second marks SMPTE timing in the header.
+        smf[12] = 0xE8;
+        smf[13] = 0x28;
+        assert!(parse_midi(&smf).is_err());
+    }
 }
