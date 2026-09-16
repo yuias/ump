@@ -4,6 +4,8 @@ use anyhow::{Context, Result};
 use rustysynth::{SoundFont, Synthesizer, SynthesizerSettings};
 use std::sync::Arc;
 
+use crate::midi::event::MAX_PORTS;
+
 pub struct SynthEngine {
     synth: Synthesizer,
     sample_rate: u32,
@@ -163,48 +165,14 @@ impl SynthPool {
     /// Create a pool from multiple SF2 data blobs with per-channel routing (single port).
     /// For backward compatibility with bundle mode.
     pub fn new(sf2_data_list: &[&[u8]], routing: [usize; 16], sample_rate: u32) -> Result<Self> {
-        if sf2_data_list.is_empty() {
-            anyhow::bail!("SynthPool requires at least one SF2 file");
-        }
-        let mut engines = Vec::with_capacity(sf2_data_list.len());
-        for (i, data) in sf2_data_list.iter().enumerate() {
-            engines.push(
-                SynthEngine::new(data, sample_rate)
-                    .with_context(|| format!("Failed to create engine {}", i))?,
-            );
-        }
-        Ok(SynthPool {
-            engines,
-            port_routing: vec![routing],
-            port_count: 1,
-        })
+        Self::new_bundle(sf2_data_list, routing, sample_rate, 1)
     }
 
     /// Create a pool with a single SF2, supporting multiple ports.
     /// Each port gets its own SynthEngine sharing the same parsed SoundFont.
     pub fn single(sf2_data: &[u8], sample_rate: u32, port_count: u8) -> Result<Self> {
-        let port_count = port_count.max(1).min(4);
         let sf = SynthEngine::parse_soundfont(sf2_data)?;
-
-        let mut engines = Vec::with_capacity(port_count as usize);
-        for i in 0..port_count {
-            engines.push(
-                SynthEngine::new_from_soundfont(sf.clone(), sample_rate)
-                    .with_context(|| format!("Failed to create engine for port {}", i))?,
-            );
-        }
-
-        let mut port_routing = Vec::with_capacity(port_count as usize);
-        for p in 0..port_count as usize {
-            // Each port routes all 16 channels to its own engine
-            port_routing.push([p; 16]);
-        }
-
-        Ok(SynthPool {
-            engines,
-            port_routing,
-            port_count,
-        })
+        Self::from_soundfonts(std::slice::from_ref(&sf), [0; 16], sample_rate, port_count)
     }
 
     /// Create a multi-port bundle pool from multiple SF2 data blobs with per-channel routing.
@@ -218,8 +186,6 @@ impl SynthPool {
         if sf2_data_list.is_empty() {
             anyhow::bail!("SynthPool requires at least one SF2 file");
         }
-        let port_count = port_count.max(1).min(4);
-
         // Parse each SF2 once into Arc<SoundFont>
         let mut soundfonts = Vec::with_capacity(sf2_data_list.len());
         for (i, data) in sf2_data_list.iter().enumerate() {
@@ -229,14 +195,42 @@ impl SynthPool {
             );
         }
 
-        // Create engines: for each port, create engines matching the bundle
+        Self::from_soundfonts(&soundfonts, routing, sample_rate, port_count)
+    }
+
+    /// Create a multi-port bundle pool from already-parsed SoundFonts.
+    ///
+    /// Each port gets its own set of engines over the same `soundfonts`, so a
+    /// caller that keeps a SoundFont cache pays the parse cost once per file
+    /// rather than once per pool. `routing` maps channels 0-15 to an index into
+    /// `soundfonts`; `port_count` is clamped to 1..=[`MAX_PORTS`].
+    ///
+    /// [`MAX_PORTS`]: crate::midi::event::MAX_PORTS
+    pub fn from_soundfonts(
+        soundfonts: &[Arc<SoundFont>],
+        routing: [usize; 16],
+        sample_rate: u32,
+        port_count: u8,
+    ) -> Result<Self> {
+        if soundfonts.is_empty() {
+            anyhow::bail!("SynthPool requires at least one SoundFont");
+        }
+        if let Some(&bad) = routing.iter().find(|&&i| i >= soundfonts.len()) {
+            anyhow::bail!(
+                "Routing entry {} is out of range for {} SoundFont(s)",
+                bad,
+                soundfonts.len()
+            );
+        }
+        let port_count = port_count.clamp(1, MAX_PORTS);
+
         let engines_per_port = soundfonts.len();
         let mut engines = Vec::with_capacity(engines_per_port * port_count as usize);
         let mut port_routing = Vec::with_capacity(port_count as usize);
 
         for p in 0..port_count as usize {
             let base_offset = p * engines_per_port;
-            for sf in &soundfonts {
+            for sf in soundfonts {
                 engines.push(
                     SynthEngine::new_from_soundfont(sf.clone(), sample_rate)
                         .with_context(|| format!("Failed to create engine for port {}", p))?,
