@@ -105,6 +105,7 @@ fn render(
         seq.seek_to_tick(seek_raw - 1, synth, &mut sink);
         shared.current_tick.store(seq.current_tick(), Ordering::Relaxed);
         shared.finished.store(false, Ordering::Relaxed);
+        sync_drum_channels(synth, shared);
     }
 
     if shared.stopped.load(Ordering::Relaxed)
@@ -122,8 +123,25 @@ fn render(
     }
 
     shared.current_tick.store(seq.current_tick(), Ordering::Relaxed);
+    sync_drum_channels(synth, shared);
     if seq.is_finished() {
         shared.finished.store(true, Ordering::Relaxed);
         shared.playing.store(false, Ordering::Relaxed);
     }
+}
+
+/// Mirror the synthesizer's drum map into `SharedState` for the UI.
+///
+/// The synthesizer is the only place that knows it, since a channel reaches the
+/// drum bank through GS, XG and bank-select paths that ump does not replay.
+fn sync_drum_channels(synth: &SynthPool, shared: &SharedState) {
+    let mut mask = 0u64;
+    for port in 0..synth.port_count() {
+        for ch in 0..16usize {
+            if synth.is_percussion_channel(port, ch) {
+                mask |= 1u64 << (port as u64 * 16 + ch as u64);
+            }
+        }
+    }
+    shared.drum_channels.store(mask, Ordering::Relaxed);
 }

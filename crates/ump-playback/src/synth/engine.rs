@@ -340,6 +340,18 @@ impl SynthPool {
         self.engines[idx].set_percussion_channel(channel, is_percussion);
     }
 
+    /// Whether a channel currently sounds the drum bank.
+    ///
+    /// Read from the synthesizer rather than tracked alongside it, because a
+    /// channel reaches the drum bank several ways: the default map, GS Use for
+    /// Rhythm Part, XG Part Mode and, in XG mode, a Bank Select MSB of 126/127.
+    pub fn is_percussion_channel(&self, port: u8, channel: usize) -> bool {
+        let idx = self.engine_idx(port, channel as u8);
+        self.engines[idx]
+            .get_channel(channel & 0xF)
+            .is_some_and(|c| c.get_is_percussion_channel())
+    }
+
     /// Set per-port channel mute mask (16-bit mask for one port's 16 channels).
     pub fn set_channel_mute_mask_for_port(&mut self, port: u8, mask: u16) {
         let p = (port as usize).min(self.port_routing.len() - 1);

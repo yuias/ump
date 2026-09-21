@@ -56,31 +56,17 @@ impl EventSink for SharedStateSink<'_> {
                 let flat_ch = *port as usize * 16 + *channel as usize;
                 shared.channel_states.aftertouch[flat_ch].store(*pressure as u32, Ordering::Relaxed);
             }
-            MidiEvent::SysEx(data) => match parse_sysex(data) {
-                Some(SysExCommand::SystemReset(_)) => {
+            // Drum channels are read back from the synthesizer, so only the
+            // controller display needs resetting here.
+            MidiEvent::SysEx(data) => {
+                if let Some(SysExCommand::SystemReset(_)) = parse_sysex(data) {
                     shared.channel_states.reset();
-                    let pc = shared.port_count.load(Ordering::Relaxed) as u8;
-                    shared.init_drum_channels(pc);
                 }
-                Some(SysExCommand::DrumMap { channel, is_drum }) => {
-                    // SysEx carries no port context, so the display tracks port 0
-                    let bit = 1u64 << channel;
-                    if is_drum {
-                        shared.drum_channels.fetch_or(bit, Ordering::Relaxed);
-                    } else {
-                        shared.drum_channels.fetch_and(!bit, Ordering::Relaxed);
-                    }
-                }
-                // Applied by the synthesizer itself.
-                Some(SysExCommand::MasterVolume(_)) | None => {}
-            },
+            }
         }
     }
 
     fn on_seek_reset(&mut self) {
-        let shared = self.0;
-        shared.channel_states.reset();
-        let pc = shared.port_count.load(Ordering::Relaxed) as u8;
-        shared.init_drum_channels(pc);
+        self.0.channel_states.reset();
     }
 }
