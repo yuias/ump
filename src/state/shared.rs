@@ -81,8 +81,6 @@ pub struct SharedState {
     pub stopped: AtomicBool,
     /// App volume (0-100), controlled by user +/- keys.
     pub volume: AtomicU32,
-    /// MIDI Master Volume from SysEx (0-127, default 127).
-    pub master_volume: AtomicU32,
     /// Seek target in ticks. 0 = no pending seek.
     /// Audio thread reads and clears this.
     pub seek_tick: AtomicU64,
@@ -127,7 +125,6 @@ impl SharedState {
             playing: AtomicBool::new(false),
             stopped: AtomicBool::new(false),
             volume: AtomicU32::new(80),
-            master_volume: AtomicU32::new(127),
             seek_tick: AtomicU64::new(0),
             finished: AtomicBool::new(false),
             muted_channels: AtomicU64::new(0),
@@ -167,10 +164,10 @@ impl SharedState {
         self.seek_tick.store(tick + 1, Ordering::Relaxed);
     }
 
+    /// Output gain from the app volume alone. MIDI Master Volume is applied by
+    /// the synthesizer, which owns it across resets and per-mode SysEx variants.
     pub fn get_volume_f32(&self) -> f32 {
-        let app_vol = self.volume.load(Ordering::Relaxed) as f32 / 100.0;
-        let master_vol = self.master_volume.load(Ordering::Relaxed) as f32 / 127.0;
-        app_vol * master_vol
+        self.volume.load(Ordering::Relaxed) as f32 / 100.0
     }
 
     /// Check if a channel is muted. Uses flat index: port * 16 + channel.

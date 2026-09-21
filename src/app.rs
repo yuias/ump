@@ -306,11 +306,13 @@ impl App {
             *seq = new_seq;
         }
 
-        // Reset synth — recreate with correct port count
+        // Reset synth — recreate with correct port count.
+        // A full system reset, so the previous file's system mode and drum map
+        // do not carry over.
         {
             let mut syn = self.synth.lock().unwrap();
             if let Some(ref mut s) = *syn {
-                s.reset();
+                s.system_reset();
             }
         }
 
@@ -324,7 +326,6 @@ impl App {
         self.shared.channel_states.reset();
         self.shared.port_count.store(port_count as u32, Ordering::Relaxed);
         self.shared.init_drum_channels(port_count);
-        self.shared.master_volume.store(127, Ordering::Relaxed);
         self.shared
             .current_bpm_x100
             .store(12000, Ordering::Relaxed);
@@ -736,7 +737,6 @@ impl App {
         // Reset shared channel state
         self.shared.channel_states.reset();
         self.shared.init_drum_channels(self.port_count);
-        self.shared.master_volume.store(127, Ordering::Relaxed);
 
         // Re-seek to current position to replay all state-changing events
         // (Bank Select, Program Change, SysEx) from the beginning

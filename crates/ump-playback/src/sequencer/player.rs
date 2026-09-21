@@ -1,7 +1,6 @@
 //! MIDI sequencer: schedules events against the audio clock.
 
 use crate::midi::event::{MidiData, MidiEvent, TimedMidiEvent};
-use crate::midi::sysex::{parse_sysex, SysExCommand};
 use crate::midi::tempo_map::TempoMap;
 use crate::synth::engine::SynthPool;
 
@@ -187,12 +186,9 @@ impl Sequencer {
         synth: &mut SynthPool,
         sink: &mut impl EventSink,
     ) {
-        synth.reset();
-        for p in 0..synth.port_count() {
-            for ch in 0..16usize {
-                synth.set_percussion_channel(p, ch, ch == 9);
-            }
-        }
+        // Back to the GM baseline: the replay below re-applies whatever the file
+        // declares, including the system mode and any drum map it moves.
+        synth.system_reset();
         sink.on_seek_reset();
 
         self.event_index = 0;
@@ -213,7 +209,7 @@ impl Sequencer {
             self.event_index += 1;
         }
 
-        // synth.reset() may clear the mute masks.
+        // The reset above may clear the mute masks.
         self.sync_mute_masks(synth);
 
         self.current_tick = target_tick;
@@ -260,20 +256,12 @@ impl Sequencer {
                 synth.channel_aftertouch(*port, *channel as i32, *pressure as i32);
             }
             MidiEvent::SysEx(data) => {
-                // Forward to rustysynth for master tune, scale tuning, etc.
+                // rustysynth applies the whole recognized set itself: resets and the
+                // system mode they select, master volume and tuning, GS and XG part
+                // parameters, and the drum map switches. Replaying any of them here
+                // would undo the mode-dependent part, notably an XG reset that leaves
+                // channel 10 on the drum bank.
                 synth.process_sysex(data);
-
-                match parse_sysex(data) {
-                    Some(SysExCommand::SystemReset(_)) => synth.system_reset(),
-                    Some(SysExCommand::GsDrumMap { channel, is_drum }) => {
-                        // SysEx has no port context — apply to port 0
-                        synth.set_percussion_channel(0, channel as usize, is_drum);
-                        synth.control_change(0, channel as i32, 0, 0);
-                        synth.program_change(0, channel as i32, 0);
-                    }
-                    // Output gain is the host's concern.
-                    Some(SysExCommand::MasterVolume(_)) | None => {}
-                }
             }
         }
     }

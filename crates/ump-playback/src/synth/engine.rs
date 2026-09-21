@@ -97,41 +97,34 @@ impl SynthEngine {
         self.synth.render(left, right);
     }
 
-    /// Reset all channels (all notes off, reset controllers).
+    /// Reset all channels: stop every voice and restore controller, tuning and
+    /// system-mode defaults. Drum channel assignments are preserved, so a caller
+    /// that wants the default map must set it itself.
     pub fn reset(&mut self) {
-        for ch in 0..16 {
-            // All Sound Off (CC 120)
-            self.synth.process_midi_message(ch, 0xB0, 120, 0);
-            // Reset All Controllers (CC 121)
-            self.synth.process_midi_message(ch, 0xB0, 121, 0);
-            // All Notes Off (CC 123)
-            self.synth.process_midi_message(ch, 0xB0, 123, 0);
-        }
+        self.synth.reset();
     }
 
     /// Process a SysEx message (raw data without F0/F7 framing).
-    /// Handles master tune, scale tuning, and system resets internally.
-    /// Master volume is managed externally by ump, so it is restored after processing.
+    ///
+    /// rustysynth applies every message it recognizes itself: system resets and
+    /// the system mode they select, master volume and tuning, GS and XG part
+    /// parameters, and the drum map switches. Callers must not replay those on
+    /// top of it, because the synthesizer interprets them per system mode.
     pub fn process_sysex(&mut self, data: &[u8]) {
         self.synth.process_sysex(data);
-        // ump manages master volume via shared state (app_volume * sysex_volume);
-        // restore rustysynth's internal master volume to avoid double-application
-        self.synth.set_master_volume(0.5);
     }
 
-    /// Full system reset: silence all channels, reset controllers,
-    /// set program 0, and configure bank (drum on Ch9, normal on others).
+    /// Full system reset, equivalent to a GM System On: restore the default drum
+    /// map on top of [`reset`](Self::reset).
+    ///
+    /// Only for resets ump initiates itself. A reset arriving as SysEx is already
+    /// applied by [`process_sysex`](Self::process_sysex), which also selects the
+    /// system mode the message declares.
     pub fn system_reset(&mut self) {
-        for ch in 0..16i32 {
-            self.synth
-                .set_percussion_channel(ch as usize, ch == 9);
-            self.synth.process_midi_message(ch, 0xB0, 120, 0);
-            self.synth.process_midi_message(ch, 0xB0, 121, 0);
-            self.synth.process_midi_message(ch, 0xB0, 123, 0);
-            // Bank 0 — set_bank auto-applies +128 offset for percussion channels
-            self.synth.process_midi_message(ch, 0xB0, 0, 0);
-            self.synth.process_midi_message(ch, 0xC0, 0, 0);
+        for ch in 0..16usize {
+            self.synth.set_percussion_channel(ch, ch == 9);
         }
+        self.synth.reset();
     }
 
     /// Set whether a channel is a percussion channel.

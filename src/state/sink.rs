@@ -61,10 +61,9 @@ impl EventSink for SharedStateSink<'_> {
                     shared.channel_states.reset();
                     let pc = shared.port_count.load(Ordering::Relaxed) as u8;
                     shared.init_drum_channels(pc);
-                    shared.master_volume.store(127, Ordering::Relaxed);
                 }
-                Some(SysExCommand::GsDrumMap { channel, is_drum }) => {
-                    // SysEx has no port context — the sequencer applies it to port 0
+                Some(SysExCommand::DrumMap { channel, is_drum }) => {
+                    // SysEx carries no port context, so the display tracks port 0
                     let bit = 1u64 << channel;
                     if is_drum {
                         shared.drum_channels.fetch_or(bit, Ordering::Relaxed);
@@ -72,10 +71,8 @@ impl EventSink for SharedStateSink<'_> {
                         shared.drum_channels.fetch_and(!bit, Ordering::Relaxed);
                     }
                 }
-                Some(SysExCommand::MasterVolume(msb)) => {
-                    shared.master_volume.store(msb as u32, Ordering::Relaxed);
-                }
-                None => {}
+                // Applied by the synthesizer itself.
+                Some(SysExCommand::MasterVolume(_)) | None => {}
             },
         }
     }

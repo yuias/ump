@@ -7,8 +7,9 @@ use super::mode_detect::MidiMode;
 pub enum SysExCommand {
     /// System reset (GM/GM2/GS/XG).
     SystemReset(MidiMode),
-    /// GS drum map assignment: set a channel as drum or normal.
-    GsDrumMap { channel: u8, is_drum: bool },
+    /// Drum map assignment: set a channel as drum or normal.
+    /// Sent as GS Use for Rhythm Part or XG Part Mode.
+    DrumMap { channel: u8, is_drum: bool },
     /// Universal Master Volume (0-127).
     MasterVolume(u8),
 }
@@ -23,8 +24,8 @@ pub fn parse_sysex(data: &[u8]) -> Option<SysExCommand> {
         return None;
     }
 
-    // Universal Non-Real-Time: 7E 7F 09 xx
-    if data[0] == 0x7E && data[1] == 0x7F && data[2] == 0x09 {
+    // Universal Non-Real-Time: 7E xx 09 nn, any device ID
+    if data[0] == 0x7E && data[1] <= 0x7F && data[2] == 0x09 {
         return match data[3] {
             0x01 => Some(SysExCommand::SystemReset(MidiMode::GM)),
             0x03 => Some(SysExCommand::SystemReset(MidiMode::GM2)),
@@ -32,10 +33,10 @@ pub fn parse_sysex(data: &[u8]) -> Option<SysExCommand> {
         };
     }
 
-    // Universal Real-Time Master Volume: 7F 7F 04 01 [lsb] [msb]
+    // Universal Real-Time Master Volume: 7F xx 04 01 [lsb] [msb], any device ID
     if data.len() >= 6
         && data[0] == 0x7F
-        && data[1] == 0x7F
+        && data[1] <= 0x7F
         && data[2] == 0x04
         && data[3] == 0x01
     {
@@ -43,33 +44,47 @@ pub fn parse_sysex(data: &[u8]) -> Option<SysExCommand> {
         return Some(SysExCommand::MasterVolume(msb));
     }
 
-    // Roland GS messages: 41 10 42 12 ...
+    // Roland GS messages: 41 1n 42 12 ...
     if data.len() >= 5
         && data[0] == 0x41
-        && data[1] == 0x10
+        && (data[1] & 0xF0) == 0x10
         && data[2] == 0x42
         && data[3] == 0x12
     {
         return parse_gs_sysex(&data[4..]);
     }
 
-    // Yamaha XG System On: 43 10 4C 00 00 7E 00
-    if data.len() >= 7
-        && data[0] == 0x43
-        && data[1] == 0x10
-        && data[2] == 0x4C
-        && data[3] == 0x00
-        && data[4] == 0x00
-        && data[5] == 0x7E
-        && data[6] == 0x00
-    {
-        return Some(SysExCommand::SystemReset(MidiMode::XG));
+    // Yamaha XG parameter change: 43 1n 4C ...
+    if data.len() >= 4 && data[0] == 0x43 && (data[1] & 0xF0) == 0x10 && data[2] == 0x4C {
+        return parse_xg_sysex(&data[3..]);
     }
 
     None
 }
 
-/// Parse the body of a Roland GS SysEx (after 41 10 42 12).
+/// Parse the body of a Yamaha XG parameter change (after 43 1n 4C).
+fn parse_xg_sysex(body: &[u8]) -> Option<SysExCommand> {
+    if body.len() < 4 {
+        return None;
+    }
+
+    // XG System On: 00 00 7E 00
+    if body[0] == 0x00 && body[1] == 0x00 && body[2] == 0x7E && body[3] == 0x00 {
+        return Some(SysExCommand::SystemReset(MidiMode::XG));
+    }
+
+    // Part Mode: 08 pp 07 vv. Unlike the GS part nibble, pp is the MIDI channel.
+    if body[0] == 0x08 && body[2] == 0x07 && body[1] < 16 {
+        return Some(SysExCommand::DrumMap {
+            channel: body[1],
+            is_drum: body[3] != 0,
+        });
+    }
+
+    None
+}
+
+/// Parse the body of a Roland GS SysEx (after 41 1n 42 12).
 fn parse_gs_sysex(body: &[u8]) -> Option<SysExCommand> {
     if body.len() < 4 {
         return None;
@@ -86,7 +101,12 @@ fn parse_gs_sysex(body: &[u8]) -> Option<SysExCommand> {
         return Some(SysExCommand::SystemReset(MidiMode::GS));
     }
 
-    // GS Drum Map: 40 1x 15 [val] [checksum]
+    // GS Master Volume: 40 00 04 [val] [checksum]
+    if body[0] == 0x40 && body[1] == 0x00 && body[2] == 0x04 {
+        return Some(SysExCommand::MasterVolume(body[3]));
+    }
+
+    // GS Use for Rhythm Part: 40 1x 15 [val] [checksum]
     // x = part number (0-15)
     if body.len() >= 4
         && body[0] == 0x40
@@ -96,7 +116,7 @@ fn parse_gs_sysex(body: &[u8]) -> Option<SysExCommand> {
         let part = body[1] & 0x0F;
         let channel = gs_part_to_channel(part);
         let is_drum = body[3] != 0;
-        return Some(SysExCommand::GsDrumMap { channel, is_drum });
+        return Some(SysExCommand::DrumMap { channel, is_drum });
     }
 
     None
@@ -158,7 +178,7 @@ mod tests {
         let data = [0x41, 0x10, 0x42, 0x12, 0x40, 0x10, 0x15, 0x02, 0x19];
         assert_eq!(
             parse_sysex(&data),
-            Some(SysExCommand::GsDrumMap {
+            Some(SysExCommand::DrumMap {
                 channel: 9,
                 is_drum: true,
             })
@@ -168,10 +188,54 @@ mod tests {
         let data = [0x41, 0x10, 0x42, 0x12, 0x40, 0x12, 0x15, 0x01, 0x18];
         assert_eq!(
             parse_sysex(&data),
-            Some(SysExCommand::GsDrumMap {
+            Some(SysExCommand::DrumMap {
                 channel: 1,
                 is_drum: true,
             })
+        );
+    }
+
+    #[test]
+    fn test_xg_part_mode() {
+        // Channel 2 to the drum bank
+        let data = [0x43, 0x10, 0x4C, 0x08, 0x02, 0x07, 0x02];
+        assert_eq!(
+            parse_sysex(&data),
+            Some(SysExCommand::DrumMap {
+                channel: 2,
+                is_drum: true,
+            })
+        );
+
+        // Channel 9 back to melodic
+        let data = [0x43, 0x10, 0x4C, 0x08, 0x09, 0x07, 0x00];
+        assert_eq!(
+            parse_sysex(&data),
+            Some(SysExCommand::DrumMap {
+                channel: 9,
+                is_drum: false,
+            })
+        );
+    }
+
+    #[test]
+    fn test_gs_master_volume() {
+        let data = [0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x04, 0x40, 0x7C];
+        assert_eq!(parse_sysex(&data), Some(SysExCommand::MasterVolume(0x40)));
+    }
+
+    #[test]
+    fn test_non_zero_device_id() {
+        let data = [0x41, 0x1F, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41];
+        assert_eq!(
+            parse_sysex(&data),
+            Some(SysExCommand::SystemReset(MidiMode::GS))
+        );
+
+        let data = [0x43, 0x1F, 0x4C, 0x00, 0x00, 0x7E, 0x00];
+        assert_eq!(
+            parse_sysex(&data),
+            Some(SysExCommand::SystemReset(MidiMode::XG))
         );
     }
 
