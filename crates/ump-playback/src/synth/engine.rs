@@ -98,8 +98,9 @@ impl SynthEngine {
     }
 
     /// Reset all channels: stop every voice and restore controller, tuning and
-    /// system-mode defaults. Drum channel assignments are preserved, so a caller
-    /// that wants the default map must set it itself.
+    /// system-mode defaults. Drum channel assignments and the reverb/chorus
+    /// parameters are preserved, so a caller that wants the defaults must
+    /// restore them itself.
     pub fn reset(&mut self) {
         self.synth.reset();
     }
@@ -115,7 +116,7 @@ impl SynthEngine {
     }
 
     /// Full system reset, equivalent to a GM System On: restore the default drum
-    /// map on top of [`reset`](Self::reset).
+    /// map and the reverb/chorus defaults on top of [`reset`](Self::reset).
     ///
     /// Only for resets ump initiates itself. A reset arriving as SysEx is already
     /// applied by [`process_sysex`](Self::process_sysex), which also selects the
@@ -125,6 +126,8 @@ impl SynthEngine {
             self.synth.set_percussion_channel(ch, ch == 9);
         }
         self.synth.reset();
+        // Otherwise a GS effect macro from the previous file stays in effect.
+        self.synth.reset_effect_parameters();
     }
 
     /// Set whether a channel is a percussion channel.
