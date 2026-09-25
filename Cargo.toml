@@ -8,6 +8,7 @@ repository = "https://github.com/yuiAs/ump"
 
 [workspace]
 members = ["crates/ump-playback"]
+exclude = ["vendor/glyphon"]
 
 [workspace.dependencies]
 anyhow = "1"
@@ -36,6 +37,10 @@ dirs = "7"
 toml = "1"
 serde = { workspace = true }
 unicode-width = "0.2"
+
+# In-tree copy of glyphon 0.12.0 so its shader can be modified locally.
+[patch.crates-io]
+glyphon = { path = "vendor/glyphon" }
 
 [profile.release]
 opt-level = 3
