@@ -278,7 +278,7 @@ impl ApplicationHandler for UmpApp {
         };
 
         let size = window.inner_size();
-        let (font_path, font_size) = self.config.resolve_font();
+        let font = self.config.resolve_font();
 
         #[cfg(feature = "wgpu-backend")]
         {
@@ -286,8 +286,9 @@ impl ApplicationHandler for UmpApp {
                 window.clone(),
                 size.width,
                 size.height,
-                font_path.as_deref(),
-                font_size,
+                font.path.as_deref(),
+                font.size,
+                font.options,
                 window.scale_factor() as f32,
             ) {
                 Ok(renderer) => self.renderer = Some(renderer),

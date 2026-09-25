@@ -38,6 +38,21 @@ volume = 80
 # crisply at multiples of their 16-dot grid).
 # size = 14.0
 
+# Snap glyph positions to whole pixels and hint outlines. Turn this off only
+# if a font looks worse with it. Default: true.
+# hinting = true
+
+# Render with no sub-pixel offset. Meant for dot fonts whose outlines sit on
+# the pixel grid. Has a visible effect only with hinting = false, since
+# hinting already places glyphs on whole pixels.
+# Default: true for an auto-detected font, false otherwise.
+# pixel_font = false
+
+# Draw track names in bold. Bold is skipped anyway when the font file has no
+# bold face, since the text would otherwise fall back to another font.
+# Default: true.
+# bold = true
+
 [window]
 # Window position and size in physical pixels (auto-saved on exit)
 # x = 100

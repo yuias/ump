@@ -45,3 +45,24 @@ impl Rect {
         self.y + self.height
     }
 }
+
+/// Glyph rasterization settings, chosen per font.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TextRenderOptions {
+    /// Snap glyph advances to whole pixels and hint outlines. Without it,
+    /// glyphs land on quarter-pixel offsets and their stems smear across
+    /// two pixel columns.
+    pub hinting: bool,
+    /// Rasterize with no sub-pixel offset at all; meant for bitmap-style dot
+    /// fonts whose outlines already sit on the pixel grid.
+    pub pixel_font: bool,
+    /// Allow bold text. The renderer still drops bold when the loaded font
+    /// file has no bold face.
+    pub bold: bool,
+}
+
+impl Default for TextRenderOptions {
+    fn default() -> Self {
+        TextRenderOptions { hinting: true, pixel_font: false, bold: true }
+    }
+}

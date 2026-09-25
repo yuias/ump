@@ -5,6 +5,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::renderer::types::TextRenderOptions;
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
     #[serde(default)]
@@ -27,6 +29,23 @@ pub struct FontConfig {
     /// Font size in logical px. Multiplied by the display's scale factor to
     /// get the physical px size actually rendered.
     pub size: Option<f32>,
+    /// Snap glyphs to whole pixels. Default: true.
+    pub hinting: Option<bool>,
+    /// Render with no sub-pixel offset, for dot fonts. Default: true for an
+    /// auto-detected font (the known candidates are all dot fonts), false
+    /// otherwise.
+    pub pixel_font: Option<bool>,
+    /// Allow bold text. Bold is dropped anyway when the loaded font file has
+    /// no bold face. Default: true.
+    pub bold: Option<bool>,
+}
+
+/// Font file, size and rendering settings resolved from `FontConfig`.
+#[derive(Debug, Clone)]
+pub struct ResolvedFont {
+    pub path: Option<String>,
+    pub size: f32,
+    pub options: TextRenderOptions,
 }
 
 impl FontConfig {
@@ -35,6 +54,18 @@ impl FontConfig {
     /// crisply); explicit or absent fonts keep the 14px default.
     fn size_for(&self, auto: bool) -> f32 {
         self.size.unwrap_or(if auto { 16.0 } else { 14.0 })
+    }
+
+    fn resolved(&self, path: Option<String>, auto: bool) -> ResolvedFont {
+        ResolvedFont {
+            path,
+            size: self.size_for(auto),
+            options: TextRenderOptions {
+                hinting: self.hinting.unwrap_or(true),
+                pixel_font: self.pixel_font.unwrap_or(auto),
+                bold: self.bold.unwrap_or(true),
+            },
+        }
     }
 }
 
@@ -148,7 +179,7 @@ impl Config {
     /// Resolve the font to load and its size, in priority order:
     /// explicit `font.path` > auto-detected file in `fonts_dir()` > system default.
     /// Auto-detected dot fonts default to 16px unless `font.size` overrides it.
-    pub fn resolve_font(&self) -> (Option<String>, f32) {
+    pub fn resolve_font(&self) -> ResolvedFont {
         let candidates: Vec<PathBuf> = Self::fonts_dir()
             .and_then(|dir| fs::read_dir(&dir).ok())
             .map(|entries| {
@@ -163,16 +194,16 @@ impl Config {
         match pick_font(self.font.path.as_deref(), &candidates) {
             FontChoice::Explicit(path) => {
                 log_info!("Font: using configured font.path = {}", path);
-                (Some(resolve_path(&path)), self.font.size_for(false))
+                self.font.resolved(Some(resolve_path(&path)), false)
             }
             FontChoice::Auto(path) => {
-                let size = self.font.size_for(true);
-                log_info!("Font: auto-detected '{}' (size {})", path.display(), size);
-                (Some(path.to_string_lossy().to_string()), size)
+                let font = self.font.resolved(Some(path.to_string_lossy().to_string()), true);
+                log_info!("Font: auto-detected '{}' (size {})", path.display(), font.size);
+                font
             }
             FontChoice::None => {
                 log_info!("Font: no font.path set and nothing found in fonts dir; using system default");
-                (None, self.font.size_for(false))
+                self.font.resolved(None, false)
             }
         }
     }
@@ -335,14 +366,14 @@ mod tests {
 
     #[test]
     fn font_config_size_defaults_to_16_when_auto_and_unset() {
-        let cfg = FontConfig { path: None, size: None };
+        let cfg = FontConfig { path: None, size: None, ..Default::default() };
         assert_eq!(cfg.size_for(true), 16.0);
         assert_eq!(cfg.size_for(false), 14.0);
     }
 
     #[test]
     fn font_config_size_override_wins_regardless_of_auto() {
-        let cfg = FontConfig { path: None, size: Some(20.0) };
+        let cfg = FontConfig { path: None, size: Some(20.0), ..Default::default() };
         assert_eq!(cfg.size_for(true), 20.0);
         assert_eq!(cfg.size_for(false), 20.0);
     }

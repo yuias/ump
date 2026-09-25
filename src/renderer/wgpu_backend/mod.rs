@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use winit::window::Window;
 
-use crate::renderer::types::{Color, Rect};
+use crate::renderer::types::{Color, Rect, TextRenderOptions};
 use crate::renderer::{RenderError, RenderResult, Renderer};
 
 use self::pipeline::{RectInstance, RectPipeline};
@@ -51,6 +51,7 @@ impl WgpuRenderer {
         height: u32,
         font_path: Option<&str>,
         font_size: f32,
+        text_options: TextRenderOptions,
         scale_factor: f32,
     ) -> Result<Self, RenderError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -113,6 +114,7 @@ impl WgpuRenderer {
             surface_format,
             font_path,
             font_size * scale_factor,
+            text_options,
         )?;
 
         // Pre-allocate persistent instance buffer

@@ -3,13 +3,14 @@
 
 use std::collections::HashMap;
 
+use glyphon::cosmic_text::{CacheKeyFlags, Hinting};
 use glyphon::{
     Attrs, Buffer, Cache, Color as GlyphonColor, ColorMode, Family, FontSystem, Metrics,
     Resolution, Shaping, SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport,
     Weight,
 };
 
-use crate::renderer::types::Color;
+use crate::renderer::types::{Color, TextRenderOptions};
 use crate::renderer::RenderError;
 
 /// Queued text entry for a single frame.
@@ -40,6 +41,13 @@ pub struct GlyphonTextRenderer {
     buffer_cache: HashMap<TextCacheKey, Buffer>,
 
     custom_family: Option<String>,
+    options: TextRenderOptions,
+    /// `options.bold`, cleared when the custom font file has no bold face:
+    /// for a missing weight cosmic-text can pick a different system font
+    /// instead of reusing the regular face (it reuses it only for monospace
+    /// fonts). A variable font reports its default weight here, so its `wght`
+    /// axis is not counted as a bold face.
+    bold_enabled: bool,
     pub(crate) default_font_size: f32,
     pub cell_width: f32,
     pub cell_height: f32,
@@ -54,22 +62,24 @@ impl GlyphonTextRenderer {
         surface_format: wgpu::TextureFormat,
         font_path: Option<&str>,
         font_size: f32,
+        options: TextRenderOptions,
     ) -> Result<Self, RenderError> {
         let mut font_system = FontSystem::new();
 
         // Load custom font and detect its family name
         let mut custom_family: Option<String> = None;
+        let mut bold_enabled = options.bold;
         if let Some(path) = font_path {
             let count_before = font_system.db().faces().count();
             match font_system.db_mut().load_font_file(path) {
                 Ok(()) => {
-                    custom_family = font_system
-                        .db()
-                        .faces()
-                        .skip(count_before)
-                        .find_map(|face| face.families.first().map(|(name, _)| name.clone()));
+                    let faces = || font_system.db().faces().skip(count_before);
+                    custom_family =
+                        faces().find_map(|face| face.families.first().map(|(name, _)| name.clone()));
+                    let has_bold = faces().any(|face| face.weight >= Weight::SEMIBOLD);
+                    bold_enabled &= has_bold;
                     if let Some(ref family) = custom_family {
-                        log_info!("Custom font loaded: family={}", family);
+                        log_info!("Custom font loaded: family={}, bold face={}", family, has_bold);
                     }
                 }
                 Err(e) => {
@@ -88,13 +98,15 @@ impl GlyphonTextRenderer {
         let viewport = Viewport::new(device, &cache);
 
         let (cell_width, cell_height) =
-            Self::measure_cell(&mut font_system, font_size, custom_family.as_deref());
+            Self::measure_cell(&mut font_system, font_size, custom_family.as_deref(), options);
 
         log_info!(
-            "wgpu text: font_size={}, cell={}x{}",
+            "wgpu text: font_size={}, cell={}x{}, {:?}, bold_enabled={}",
             font_size,
             cell_width,
-            cell_height
+            cell_height,
+            options,
+            bold_enabled
         );
 
         Ok(GlyphonTextRenderer {
@@ -107,6 +119,8 @@ impl GlyphonTextRenderer {
             queued: Vec::with_capacity(512),
             buffer_cache: HashMap::with_capacity(256),
             custom_family,
+            options,
+            bold_enabled,
             default_font_size: font_size,
             cell_width,
             cell_height,
@@ -115,24 +129,43 @@ impl GlyphonTextRenderer {
         })
     }
 
-    fn make_attrs<'a>(bold: bool, family: Option<&'a str>) -> Attrs<'a> {
-        match (bold, family) {
-            (true, Some(f)) => Attrs::new().weight(Weight::BOLD).family(Family::Name(f)),
-            (true, None) => Attrs::new().weight(Weight::BOLD),
-            (false, Some(f)) => Attrs::new().family(Family::Name(f)),
-            (false, None) => Attrs::new(),
+    fn make_attrs<'a>(
+        bold: bool,
+        family: Option<&'a str>,
+        options: TextRenderOptions,
+    ) -> Attrs<'a> {
+        let mut attrs = Attrs::new();
+        if bold {
+            attrs = attrs.weight(Weight::BOLD);
         }
+        if let Some(f) = family {
+            attrs = attrs.family(Family::Name(f));
+        }
+        let mut flags = CacheKeyFlags::empty();
+        if !options.hinting {
+            flags |= CacheKeyFlags::DISABLE_HINTING;
+        }
+        if options.pixel_font {
+            flags |= CacheKeyFlags::PIXEL_FONT;
+        }
+        attrs.cache_key_flags(flags)
+    }
+
+    fn new_buffer(font_system: &mut FontSystem, size: f32, options: TextRenderOptions) -> Buffer {
+        let mut buffer = Buffer::new(font_system, Metrics::new(size, size * 1.2));
+        buffer.set_hinting(if options.hinting { Hinting::Enabled } else { Hinting::Disabled });
+        buffer
     }
 
     fn measure_cell(
         font_system: &mut FontSystem,
         font_size: f32,
         family: Option<&str>,
+        options: TextRenderOptions,
     ) -> (f32, f32) {
-        let metrics = Metrics::new(font_size, font_size * 1.2);
-        let mut buffer = Buffer::new(font_system, metrics);
+        let mut buffer = Self::new_buffer(font_system, font_size, options);
         buffer.set_size(Some(200.0), Some(200.0));
-        let attrs = Self::make_attrs(false, family);
+        let attrs = Self::make_attrs(false, family, options);
         buffer.set_text("M", &attrs, Shaping::Advanced, None);
         buffer.shape_until_scroll(font_system, false);
 
@@ -156,7 +189,7 @@ impl GlyphonTextRenderer {
     /// buffers are keyed by their own size, so stale entries are just never reused).
     pub fn set_font_size(&mut self, px: f32) {
         let (cell_width, cell_height) =
-            Self::measure_cell(&mut self.font_system, px, self.custom_family.as_deref());
+            Self::measure_cell(&mut self.font_system, px, self.custom_family.as_deref(), self.options);
         self.default_font_size = px;
         self.cell_width = cell_width;
         self.cell_height = cell_height;
@@ -192,13 +225,16 @@ impl GlyphonTextRenderer {
         } else {
             size
         };
+        // Rects are pixel-snapped; a fractional origin here would shift every
+        // glyph by a sub-pixel amount and blur it (e.g. columns placed after a
+        // `0.6 * ch` swatch).
         self.queued.push(QueuedText {
-            x,
-            y,
+            x: x.round(),
+            y: y.round(),
             text: text.to_string(),
             color,
             size: effective_size,
-            bold,
+            bold: bold && self.bold_enabled,
         });
     }
 
@@ -233,6 +269,7 @@ impl GlyphonTextRenderer {
         );
 
         let custom_family = self.custom_family.as_deref();
+        let options = self.options;
         let width = self.width;
         let height = self.height;
 
@@ -244,10 +281,9 @@ impl GlyphonTextRenderer {
             let key = (q.text.clone(), size_key, q.bold);
 
             if !self.buffer_cache.contains_key(&key) {
-                let metrics = Metrics::new(q.size, q.size * 1.2);
-                let mut buffer = Buffer::new(&mut self.font_system, metrics);
+                let mut buffer = Self::new_buffer(&mut self.font_system, q.size, options);
                 buffer.set_size(Some(10000.0), Some(q.size * 2.0));
-                let attrs = Self::make_attrs(q.bold, custom_family);
+                let attrs = Self::make_attrs(q.bold, custom_family, options);
                 buffer.set_text(&q.text, &attrs, Shaping::Advanced, None);
                 buffer.shape_until_scroll(&mut self.font_system, false);
                 self.buffer_cache.insert(key, buffer);
