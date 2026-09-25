@@ -53,6 +53,11 @@ volume = 80
 # Default: true.
 # bold = true
 
+# How glyph edge coverage becomes opacity. "boost" (2c - c^2, the curve
+# egui uses in dark mode) keeps light-on-dark text from looking soft;
+# "linear" is plain grayscale anti-aliasing. Default: "boost".
+# coverage = "boost"
+
 [window]
 # Window position and size in physical pixels (auto-saved on exit)
 # x = 100

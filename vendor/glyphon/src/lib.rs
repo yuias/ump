@@ -11,7 +11,7 @@ mod text_atlas;
 mod text_render;
 mod viewport;
 
-pub use cache::Cache;
+pub use cache::{Cache, CoverageCurve};
 pub use custom_glyph::{
     ContentType, CustomGlyph, CustomGlyphId, RasterizeCustomGlyphRequest, RasterizedCustomGlyph,
 };

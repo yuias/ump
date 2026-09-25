@@ -59,10 +59,13 @@ pub struct TextRenderOptions {
     /// Allow bold text. The renderer still drops bold when the loaded font
     /// file has no bold face.
     pub bold: bool,
+    /// Map glyph coverage to alpha with `2c - c^2` instead of `c`, so the
+    /// anti-aliased edges of light-on-dark text are not rendered too faint.
+    pub coverage_boost: bool,
 }
 
 impl Default for TextRenderOptions {
     fn default() -> Self {
-        TextRenderOptions { hinting: true, pixel_font: false, bold: true }
+        TextRenderOptions { hinting: true, pixel_font: false, bold: true, coverage_boost: true }
     }
 }

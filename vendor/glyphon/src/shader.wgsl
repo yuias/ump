@@ -112,6 +112,9 @@ fn vs_main(in_vert: VertexInput) -> VertexOutput {
     return vert_output;
 }
 
+// 0 = linear, 1 = 2c - c^2 (see `CoverageCurve`).
+override coverage_curve: u32 = 0u;
+
 @fragment
 fn fs_main(in_frag: VertexOutput) -> @location(0) vec4<f32> {
     switch in_frag.content_type {
@@ -119,7 +122,11 @@ fn fs_main(in_frag: VertexOutput) -> @location(0) vec4<f32> {
             return textureSampleLevel(color_atlas_texture, atlas_sampler, in_frag.uv, 0.0);
         }
         case 1u: {
-            return vec4<f32>(in_frag.color.rgb, in_frag.color.a * textureSampleLevel(mask_atlas_texture, atlas_sampler, in_frag.uv, 0.0).x);
+            var coverage = textureSampleLevel(mask_atlas_texture, atlas_sampler, in_frag.uv, 0.0).x;
+            if coverage_curve == 1u {
+                coverage = 2.0 * coverage - coverage * coverage;
+            }
+            return vec4<f32>(in_frag.color.rgb, in_frag.color.a * coverage);
         }
         default: {
             return vec4<f32>(0.0);

@@ -38,6 +38,15 @@ pub struct FontConfig {
     /// Allow bold text. Bold is dropped anyway when the loaded font file has
     /// no bold face. Default: true.
     pub bold: Option<bool>,
+    /// Glyph coverage-to-alpha curve: "boost" (default) or "linear".
+    pub coverage: Option<CoverageMode>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CoverageMode {
+    Linear,
+    Boost,
 }
 
 /// Font file, size and rendering settings resolved from `FontConfig`.
@@ -64,6 +73,7 @@ impl FontConfig {
                 hinting: self.hinting.unwrap_or(true),
                 pixel_font: self.pixel_font.unwrap_or(auto),
                 bold: self.bold.unwrap_or(true),
+                coverage_boost: self.coverage != Some(CoverageMode::Linear),
             },
         }
     }

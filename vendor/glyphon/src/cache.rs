@@ -17,6 +17,18 @@ use wgpu::{
     VertexFormat, VertexState,
 };
 
+/// How mask-glyph coverage from the rasterizer maps to alpha.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum CoverageCurve {
+    /// `alpha = coverage`, upstream glyphon behavior.
+    #[default]
+    Linear,
+    /// `alpha = 2 * coverage - coverage^2`. Raises partially covered edge
+    /// pixels, which keeps light-on-dark text from looking thin and soft.
+    /// Same curve as egui's dark-mode default.
+    Boost,
+}
+
 /// A cache to share common resources (e.g., pipelines, layouts, shaders) between multiple text
 /// renderers.
 #[derive(Debug, Clone)]
@@ -39,12 +51,18 @@ struct Inner {
     atlas_layout: BindGroupLayout,
     uniforms_layout: BindGroupLayout,
     pipeline_layout: PipelineLayout,
+    coverage_curve: CoverageCurve,
     cache: InnerCache,
 }
 
 impl Cache {
     /// Creates a new `Cache` with the given `device`.
     pub fn new(device: &Device) -> Self {
+        Self::with_coverage_curve(device, CoverageCurve::default())
+    }
+
+    /// Creates a new `Cache` whose pipelines map glyph coverage through `curve`.
+    pub fn with_coverage_curve(device: &Device, coverage_curve: CoverageCurve) -> Self {
         let sampler = device.create_sampler(&SamplerDescriptor {
             label: Some("glyphon sampler"),
             min_filter: FilterMode::Nearest,
@@ -155,6 +173,7 @@ impl Cache {
             uniforms_layout,
             atlas_layout,
             pipeline_layout,
+            coverage_curve,
             cache: Mutex::new(Vec::new()),
         }))
     }
@@ -208,8 +227,16 @@ impl Cache {
             pipeline_layout,
             shader,
             vertex_buffers,
+            coverage_curve,
             ..
         } = self.0.deref();
+        let fragment_constants = [(
+            "coverage_curve",
+            match coverage_curve {
+                CoverageCurve::Linear => 0.0,
+                CoverageCurve::Boost => 1.0,
+            },
+        )];
 
         let mut cache = cache.lock().expect("Write pipeline cache");
 
@@ -235,7 +262,10 @@ impl Cache {
                             blend: Some(BlendState::ALPHA_BLENDING),
                             write_mask: ColorWrites::default(),
                         })],
-                        compilation_options: PipelineCompilationOptions::default(),
+                        compilation_options: PipelineCompilationOptions {
+                            constants: &fragment_constants,
+                            ..Default::default()
+                        },
                     }),
                     primitive: PrimitiveState {
                         topology: PrimitiveTopology::TriangleStrip,

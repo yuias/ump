@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use glyphon::cosmic_text::{CacheKeyFlags, Hinting};
 use glyphon::{
-    Attrs, Buffer, Cache, Color as GlyphonColor, ColorMode, Family, FontSystem, Metrics,
+    Attrs, Buffer, Cache, Color as GlyphonColor, ColorMode, CoverageCurve, Family, FontSystem, Metrics,
     Resolution, Shaping, SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport,
     Weight,
 };
@@ -89,7 +89,8 @@ impl GlyphonTextRenderer {
         }
 
         let swash_cache = SwashCache::new();
-        let cache = Cache::new(device);
+        let curve = if options.coverage_boost { CoverageCurve::Boost } else { CoverageCurve::Linear };
+        let cache = Cache::with_coverage_curve(device, curve);
         // Use Web color mode: our surface is non-sRGB (linear texture storing sRGB values),
         // so we must skip glyphon's srgb_to_linear conversion in the shader.
         let mut atlas =
